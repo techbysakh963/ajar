@@ -201,9 +201,13 @@ fetch_release() {
         exit 1; }
     command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
     tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-    local url="https://github.com/$REPO/releases/download/v$AJAR_VERSION/ajar-$AJAR_VERSION.tar.gz"
+    # AJAR_RELEASE_BASE only exists for testing against a local mirror; the embedded
+    # checksum still has to match, so it cannot be used to install something else.
+    local base="${AJAR_RELEASE_BASE:-https://github.com/$REPO/releases/download/v$AJAR_VERSION}"
+    local url="$base/ajar-$AJAR_VERSION.tar.gz" proto="=https"
+    [[ "$base" == http://127.0.0.1:* ]] && proto="=http"
     say "Downloading $url"
-    curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/ajar.tar.gz" "$url"
+    curl -fsSL --proto "$proto" --tlsv1.2 -o "$tmp/ajar.tar.gz" "$url"
     local got; got="$(sha256sum "$tmp/ajar.tar.gz" | cut -d' ' -f1)"
     if [[ "$got" != "$AJAR_TARBALL_SHA256" ]]; then
         echo "CHECKSUM MISMATCH: expected $AJAR_TARBALL_SHA256, got $got. Nothing was installed." >&2
