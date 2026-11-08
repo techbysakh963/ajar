@@ -3,3 +3,4 @@ screenshots/raw/
 *.iso
 /dist/
 __pycache__/
+/dist/

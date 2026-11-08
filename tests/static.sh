@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 fail=0
-shell_files=(install.sh bin/ajar libexec/enable libexec/disable tests/*.sh tests/fixtures/*.sh)
+shell_files=(install.sh tools/*.sh bin/ajar libexec/enable libexec/disable tests/*.sh tests/fixtures/*.sh)
 shellcheck -x "${shell_files[@]}" || fail=1
 for f in "${shell_files[@]}"; do
     dups="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*\(\)' "$f" | sort | uniq -d)"
