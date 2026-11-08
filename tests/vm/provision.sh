@@ -1,11 +1,12 @@
 #!/bin/bash
-# Build a throwaway desktop VM from an official cloud image, for testing Ajar on a real
+# Build a throwaway desktop VM from an official cloud image (for Debian use the "generic"
+# images: "genericcloud" has a cloud kernel without graphics or emulated-NIC drivers), for testing Ajar on a real
 # desktop and taking real screenshots. Uses libvirt (qemu:///system). Nothing in the base
 # image is modified: each VM gets a thin qcow2 overlay.
 #
 #   tests/vm/provision.sh <name> <base-image> <desktop>
 #     desktop: gnome | xfce | gnome43-tray
-#   e.g. tests/vm/provision.sh ajar-debian13 ~/ajar-vms/debian-13.qcow2 gnome
+#   e.g. tests/vm/provision.sh ajar-debian13 ~/ajar-vms/debian-13-generic.qcow2 gnome
 #
 # The VM gets user "demo" (throwaway password in $VMDIR/password, sudo group), your SSH key
 # from $VMDIR/id_ed25519.pub, autologin into the desktop, and qemu-guest-agent.
@@ -21,7 +22,7 @@ hash="$(python3 -c 'import crypt,sys; print(crypt.crypt(sys.argv[1], crypt.mksal
 
 case "$desktop" in
     gnome)
-        if grep -qi ubuntu <<<"$base"; then pkgs="ubuntu-desktop-minimal"; dm=gdm3
+        if grep -qi ubuntu <<<"$(basename "$base")"; then pkgs="ubuntu-desktop-minimal"; dm=gdm3
         else pkgs="task-gnome-desktop"; dm=gdm3; fi ;;
     gnome43-tray) pkgs="task-gnome-desktop gnome-shell-extension-appindicator"; dm=gdm3 ;;
     xfce) pkgs="task-xfce-desktop"; dm=lightdm ;;
@@ -30,7 +31,7 @@ esac
 
 if [[ "$dm" == gdm3 ]]; then
     autologin='printf "[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=demo\nWaylandEnable=true\n" > /etc/gdm3/daemon.conf'
-    grep -qi ubuntu <<<"$base" && autologin="${autologin//\/etc\/gdm3\/daemon.conf//etc/gdm3/custom.conf}"
+    grep -qi ubuntu <<<"$(basename "$base")" && autologin="${autologin//\/etc\/gdm3\/daemon.conf//etc/gdm3/custom.conf}"
 else
     autologin='mkdir -p /etc/lightdm/lightdm.conf.d && printf "[Seat:*]\nautologin-user=demo\nautologin-user-timeout=0\n" > /etc/lightdm/lightdm.conf.d/50-autologin.conf'
 fi
@@ -70,7 +71,7 @@ qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk" 24G
 virt-install --connect qemu:///system --name "$name" --memory 4096 --vcpus 2 \
     --disk "path=$disk,format=qcow2" --disk "path=$seed,device=cdrom" \
     --import --os-variant detect=on,require=off \
-    --network network=default --graphics spice --video virtio --channel spicevmc \
+    --network network=default,model=virtio --graphics spice --video virtio --channel spicevmc \
     --channel unix,target.type=virtio,target.name=org.qemu.guest_agent.0 \
     --noautoconsole --wait 0
 echo "$name: provisioning (desktop install takes 5-15 min). Password: $VMDIR/password"

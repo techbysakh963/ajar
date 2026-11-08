@@ -37,7 +37,7 @@ vshot() {   # vshot <out.png>
     virsh -c qemu:///system screenshot "$VM" "$ppm" >/dev/null && magick "$ppm" "$1" && rm -f "$ppm" && echo "$1"
 }
 
-# Real key events through the hypervisor. Supports a-z A-Z 0-9 space.
+# Real key events through the hypervisor. Supports a-z A-Z 0-9 space - . / = | >
 vtype() {
     local s="$1" i c k
     for (( i=0; i<${#s}; i++ )); do
@@ -47,6 +47,12 @@ vtype() {
             [A-Z]) virsh -c qemu:///system send-key "$VM" KEY_LEFTSHIFT "KEY_$c" >/dev/null ;;
             [0-9]) virsh -c qemu:///system send-key "$VM" "KEY_$c" >/dev/null ;;
             ' ')   virsh -c qemu:///system send-key "$VM" KEY_SPACE >/dev/null ;;
+            -) virsh -c qemu:///system send-key "$VM" KEY_MINUS >/dev/null ;;
+            .) virsh -c qemu:///system send-key "$VM" KEY_DOT >/dev/null ;;
+            /) virsh -c qemu:///system send-key "$VM" KEY_SLASH >/dev/null ;;
+            =) virsh -c qemu:///system send-key "$VM" KEY_EQUAL >/dev/null ;;
+            '|') virsh -c qemu:///system send-key "$VM" KEY_LEFTSHIFT KEY_BACKSLASH >/dev/null ;;
+            '>') virsh -c qemu:///system send-key "$VM" KEY_LEFTSHIFT KEY_DOT >/dev/null ;;
             *) echo "vtype: unsupported character" >&2; return 1 ;;
         esac
         sleep 0.05
