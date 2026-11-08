@@ -152,8 +152,10 @@ icon_file() {
 }
 
 # notify <urgency> <icon> <title> <body> [notify-send args...]
-# Every Ajar notification replaces the previous one, so an old "is on" never lingers
-# after turning off. The id lives in $XDG_RUNTIME_DIR (private to the user).
+# On/off messages are transient (a banner, not kept in the notification list), so an old
+# "is on" never lingers looking current. They also ask to replace the previous Ajar
+# notification; servers that scope ids per connection (GNOME) ignore that, so it is only
+# a bonus. The id lives in $XDG_RUNTIME_DIR (private to the user).
 notify() {
     command -v notify-send >/dev/null || return 0
     local urgency="$1" icon="$2" title="$3" body="$4"; shift 4
@@ -164,7 +166,7 @@ notify() {
         [[ -f "$idf" ]] && id="$(<"$idf")"
         [[ "$id" =~ ^[0-9]+$ ]] && replace=(-r "$id")
     fi
-    new="$(notify-send -p "${replace[@]}" -a Ajar -u "$urgency" -i "$(icon_file "$icon")" "$@" "$title" "$body" 2>/dev/null)"
+    new="$(notify-send -p -e "${replace[@]}" -a Ajar -u "$urgency" -i "$(icon_file "$icon")" "$@" "$title" "$body" 2>/dev/null)"
     new="${new%%$'\n'*}"
     [[ -n "$idf" && "$new" =~ ^[0-9]+$ ]] && printf '%s' "$new" > "$idf"
     return 0
@@ -191,23 +193,83 @@ cmd_remind() {
 }
 
 # Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
+ask_helper() {   # locate share/ajar-ask (installed or in a dev checkout)
+    local d
+    for d in /usr/share/ajar /usr/local/share/ajar "$(dirname "$(readlink -f "$0")")/../share"; do
+        [[ -x "$d/ajar-ask" ]] && { printf '%s' "$d/ajar-ask"; return 0; }
+    done
+    return 1
+}
+
+# ask_with_actions <icon> <title> <body> <key> <label> [...]: prints the chosen key or nothing.
+# shellcheck disable=SC2329  # called inside $( ) in cmd_fire_reminder
+# Replaces the previous Ajar notification and remembers the new id.
+ask_with_actions() {
+    local icon="$1" title="$2" body="$3"; shift 3
+    local helper rid=0 out idf="${XDG_RUNTIME_DIR:-}/ajar-notification-id"
+    helper="$(ask_helper)" && python3 -c 'import gi' 2>/dev/null || return 1
+    [[ -n "${XDG_RUNTIME_DIR:-}" && -f "$idf" ]] && rid="$(<"$idf")"
+    [[ "$rid" =~ ^[0-9]+$ ]] || rid=0
+    out="$(AJAR_ID_FILE="${XDG_RUNTIME_DIR:+$idf}" "$helper" "$(icon_file "$icon")" "$title" "$body" "$rid" "$@")" || return 1
+    [[ "$out" == *$'\n'* ]] && printf '%s\n' "${out#*$'\n'}"
+    return 0
+}
+
+# Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
+gv_str() {   # quote a value as a GVariant string literal for gdbus
+    local v="${1//\\/\\\\}"; v="${v//\'/\\\'}"; printf "'%s'" "$v"
+}
+
+# ask_with_actions <icon> <title> <body> <key> <label> [<key> <label>...]
+# Shows a notification with buttons through the freedesktop Notifications D-Bus API and
+# prints the chosen key (nothing if dismissed). Uses gdbus directly: libnotify's notify-send
+# refuses actions on some systems (it routes through the portal), even when the server
+# supports them.
+ask_with_actions() {
+    local icon="$1" title="$2" body="$3"; shift 3
+    local actions="" id="" rid=0 line idf="${XDG_RUNTIME_DIR:-/nonexistent}/ajar-notification-id"
+    while (( $# >= 2 )); do actions+="${actions:+, }$(gv_str "$1"), $(gv_str "$2")"; shift 2; done
+    [[ -f "$idf" ]] && rid="$(<"$idf")"; [[ "$rid" =~ ^[0-9]+$ ]] || rid=0
+    local dest=(--session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications)
+
+    coproc MON { exec gdbus monitor "${dest[@]}" 2>/dev/null; }   # listen before sending
+    sleep 0.3
+    id="$(gdbus call "${dest[@]}" --method org.freedesktop.Notifications.Notify \
+        Ajar "$rid" "$(gv_str "$(icon_file "$icon")")" "$(gv_str "$title")" "$(gv_str "$body")" \
+        "[$actions]" "{'urgency': <byte 2>, 'resident': <true>, 'desktop-entry': <'io.github.techbysakh963.Ajar'>}" \
+        0 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+    if [[ -z "$id" ]]; then kill "$MON_PID" 2>/dev/null; return 1; fi
+    [[ "$idf" != /nonexistent/* ]] && printf '%s' "$id" > "$idf"
+    while IFS= read -r line <&"${MON[0]}"; do
+        if [[ "$line" =~ ActionInvoked\ \(uint32\ $id,\ \'([a-z]+)\'\) ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"; break
+        elif [[ "$line" =~ NotificationClosed\ \(uint32\ $id, ]]; then
+            break
+        fi
+    done
+    kill "$MON_PID" 2>/dev/null
+    return 0
+}
+
+# Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
 cmd_fire_reminder() {
-    local again="${1:-30m}" since mins title choice
+    local again="${1:-30m}" since="" mins="" title choice
     read_state
     [[ "$STATE" == on ]] || return 0
     log "reminder: passwordless sudo is still ON"
-    command -v notify-send >/dev/null || return 0
     if read -r since mins < <(on_since); then
         title="Passwordless sudo has been on for $mins min"
     else
         title="Passwordless sudo is still on"
     fi
-    # Replaces the "is on" notification, then blocks until the user picks an action or
-    # dismisses it (this runs in the user's timer unit, not in a terminal).
-    choice="$(notify-send -a Ajar -u critical -i "$(icon_file io.github.techbysakh963.Ajar)" \
-        -r "$(cat "${XDG_RUNTIME_DIR:-/nonexistent}/ajar-notification-id" 2>/dev/null || echo 0)" \
-        -A off="Turn off" -A again="Remind me in $again" \
-        "$title" "Since ${since:-earlier}. Any program running as $(me) can become root without asking." 2>/dev/null)"
+    local body
+    body="Since ${since:-earlier}. Any program running as $(me) can become root without asking."
+    if ! choice="$(ask_with_actions io.github.techbysakh963.Ajar "$title" "$body" \
+            off "Turn off" again "Remind me in $again")"; then
+        notify critical io.github.techbysakh963.Ajar "$title" "$body"   # no buttons available
+        choice=""
+    fi
+    log "reminder answered: ${choice:-dismissed}"
     case "$choice" in
         off)   cmd_off ;;
         again) cmd_remind "$again" >/dev/null ;;

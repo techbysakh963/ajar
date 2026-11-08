@@ -16,7 +16,7 @@ const SUDOERS_D = '/etc/sudoers.d';
 const AjarToggle = GObject.registerClass(
 class AjarToggle extends QuickMenuToggle {
     _init(ext) {
-        super._init({title: 'Passwordless Sudo', toggleMode: false});
+        super._init({title: 'Sudo', toggleMode: false});
         this._ext = ext;
         this._busy = false;
         this.connect('clicked', () => this._onClicked());
@@ -44,7 +44,7 @@ class AjarToggle extends QuickMenuToggle {
         const icon = this._ext.icon(Ajar.iconFor(st));
         this.set({checked: st.open, gicon: icon, subtitle: Ajar.describe(st)});
         this.reactive = st.state !== 'unavailable';
-        this.menu.setHeader(icon, 'Passwordless Sudo', Ajar.describe(st));
+        this.menu.setHeader(icon, st.open ? 'Passwordless sudo is on' : 'Passwordless sudo is off', Ajar.describe(st));
         this._onItems.actor.visible = !st.open;
         this._openItems.actor.visible = st.state === 'on';
         this._cancelItem.visible = st.remindAt !== null;

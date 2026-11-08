@@ -1,0 +1,64 @@
+#!/usr/bin/python3 -I
+"""Show a notification with buttons and print the key of the button pressed.
+
+    ajar-ask ICON TITLE BODY REPLACE_ID KEY LABEL [KEY LABEL ...]
+
+Prints "id=<n>" on the first line (and writes <n> to $AJAR_ID_FILE right away, so other
+commands can replace or close it while we wait), then the chosen key (or nothing if the notification was
+dismissed). Speaks the freedesktop Notifications D-Bus API on ONE connection: GNOME Shell
+sends ActionInvoked/NotificationClosed only to the connection that created the notification,
+so a separate `gdbus monitor` never sees them, and libnotify's notify-send refuses actions
+on some systems. Unprivileged; runs as the desktop user.
+"""
+import os
+import sys
+
+from gi.repository import Gio, GLib
+
+BUS, PATH, IFACE = 'org.freedesktop.Notifications', '/org/freedesktop/Notifications', 'org.freedesktop.Notifications'
+
+
+def main(argv):
+    if len(argv) < 7 or len(argv) % 2 == 0:
+        print(__doc__, file=sys.stderr)
+        return 2
+    icon, title, body = argv[1], argv[2], argv[3]
+    replace_id = int(argv[4]) if argv[4].isdigit() else 0
+    actions = argv[5:]
+    conn = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    loop = GLib.MainLoop()
+    state = {'id': None, 'choice': None}
+
+    def on_signal(_c, _sender, _path, _iface, signal, params):
+        nid = params[0]
+        if nid != state['id']:
+            return
+        if signal == 'ActionInvoked' and params[1] in actions[0::2]:
+            state['choice'] = params[1]
+        loop.quit()   # ActionInvoked or NotificationClosed: either way we are done
+
+    for sig in ('ActionInvoked', 'NotificationClosed'):
+        conn.signal_subscribe(BUS, IFACE, sig, PATH, None, Gio.DBusSignalFlags.NONE, on_signal)
+
+    hints = {
+        'urgency': GLib.Variant('y', 2),
+        'resident': GLib.Variant('b', True),
+        'desktop-entry': GLib.Variant('s', 'io.github.techbysakh963.Ajar'),
+    }
+    reply = conn.call_sync(BUS, PATH, IFACE, 'Notify',
+                           GLib.Variant('(susssasa{sv}i)', ('Ajar', replace_id, icon, title, body,
+                                                             actions, hints, 0)),
+                           GLib.VariantType('(u)'), Gio.DBusCallFlags.NONE, -1, None)
+    state['id'] = reply[0]
+    print(f"id={state['id']}", flush=True)
+    if os.environ.get('AJAR_ID_FILE'):
+        with open(os.environ['AJAR_ID_FILE'], 'w') as f:
+            f.write(str(state['id']))
+    loop.run()
+    if state['choice']:
+        print(state['choice'], flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
