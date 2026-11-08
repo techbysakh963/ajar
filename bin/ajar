@@ -220,7 +220,10 @@ cmd_on() {
 cmd_off() {
     read_state
     systemctl --user stop "$UNIT.timer" 2>/dev/null
-    if (( OURS )); then
+    # Don't rely only on OURS: it is a file check made with the user's permissions, and a
+    # locked-down /etc/sudoers.d (0750) hides the file. The helper is idempotent, so run it
+    # whenever sudo is effectively passwordless or our file is visible.
+    if (( OURS )) || [[ "$STATE" != off ]]; then
         pkexec_run disable; local rc=$?
         (( rc == 0 )) || { err "turning off failed (pkexec exit $rc). Remote or inactive sessions must authenticate."; return "$rc"; }
         sudo -k 2>/dev/null
@@ -237,10 +240,11 @@ cmd_off() {
 # --------------------------------------------------------------- doctor ---
 
 cmd_doctor() {
-    local ok=0 warn=0
-    pass() { printf '  \e[32mok\e[0m    %s\n' "$*"; ok=$((ok+1)); }
-    note() { printf '  \e[33mnote\e[0m  %s\n' "$*"; warn=$((warn+1)); }
-    bad()  { printf '  \e[31mfix\e[0m   %s\n' "$*"; warn=$((warn+1)); }
+    local ok=0 warn=0 g='' y='' r='' z=''
+    [[ -t 1 ]] && { g=$'\e[32m'; y=$'\e[33m'; r=$'\e[31m'; z=$'\e[0m'; }
+    pass() { printf '  %sok%s    %s\n' "$g" "$z" "$*"; ok=$((ok+1)); }
+    note() { printf '  %snote%s  %s\n' "$y" "$z" "$*"; warn=$((warn+1)); }
+    bad()  { printf '  %sfix%s   %s\n' "$r" "$z" "$*"; warn=$((warn+1)); }
     say "Ajar $VERSION doctor"
 
     local flavor; flavor="$(sudo_flavor)"
