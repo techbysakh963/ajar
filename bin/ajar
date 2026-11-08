@@ -381,7 +381,9 @@ cmd_doctor() {
     esac
     [[ -e "$SUDOERS_D/90-sudo-gate" ]] && note "the old Sudo Gate prototype rule is present ($SUDOERS_D/90-sudo-gate)."
 
-    local de="${XDG_CURRENT_DESKTOP:-unknown}"
+    local de="${XDG_CURRENT_DESKTOP:-}"
+    [[ -z "$de" ]] && pgrep -u "$(id -u)" -x gnome-shell >/dev/null && de=GNOME
+    de="${de:-unknown}"
     if [[ "$de" == *GNOME* ]] && command -v gnome-shell >/dev/null; then
         local gv; gv="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
         if (( gv >= 45 && gv <= 50 )); then pass "desktop: GNOME $gv (Quick Settings toggle supported)"

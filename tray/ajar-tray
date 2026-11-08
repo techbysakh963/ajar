@@ -60,6 +60,29 @@ HINT = {
 }
 
 
+def enable_gnome_toggle_once():
+    """First login after installing the .deb: enable the Quick Settings toggle for this user.
+
+    Package scripts run as root and cannot enable a per-user GNOME extension. We do it once
+    (remembered in ~/.config/ajar/), so a user who later disables it on purpose keeps it off.
+    Returns True when the toggle was enabled and this tray icon is not needed."""
+    flag = os.path.join(GLib.get_user_config_dir(), 'ajar', 'gnome-toggle-offered')
+    if os.path.exists(flag) or 'GNOME' not in os.environ.get('XDG_CURRENT_DESKTOP', ''):
+        return False
+    try:
+        version = int(GLib.spawn_command_line_sync('gnome-shell --version')[1].split()[-1].split(b'.')[0])
+    except (GLib.Error, ValueError, IndexError):
+        return False
+    if not 45 <= version <= 50:
+        return False
+    ok = GLib.spawn_sync(None, ['gnome-extensions', 'enable', EXTENSION_UUID], None,
+                         GLib.SpawnFlags.SEARCH_PATH, None)[3] == 0
+    os.makedirs(os.path.dirname(flag), exist_ok=True)
+    with open(flag, 'w') as f:
+        f.write('enabled\n' if ok else 'failed\n')
+    return ok
+
+
 def gnome_toggle_active():
     """On GNOME 45+ the Quick Settings toggle does this job; don't show a second icon."""
     # Look the schema up first: Gio.Settings.new() on a missing schema does not raise, it
@@ -217,7 +240,7 @@ class AjarTray:
 
 
 def main():
-    if '--force' not in sys.argv and gnome_toggle_active():
+    if '--force' not in sys.argv and (gnome_toggle_active() or enable_gnome_toggle_once()):
         print('ajar-tray: the GNOME Quick Settings toggle is active; not starting the tray icon.')
         return 0
     if Indicator is None and not hasattr(Gtk, 'StatusIcon'):
