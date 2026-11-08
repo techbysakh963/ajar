@@ -20,10 +20,11 @@ vip() { virsh -c qemu:///system domifaddr "$VM" 2>/dev/null | awk '/ipv4/{split(
 vssh() { ssh "${_K[@]}" "$VUSER@$(vip)" "$@"; }
 
 # Run in the user's graphical session environment (session bus, Wayland/X display).
-vrun() {
-    vssh "export XDG_RUNTIME_DIR=/run/user/\$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$(id -u)/bus
+vrun() {   # always bash on the remote side (Kali's login shell is zsh)
+    local script="export XDG_RUNTIME_DIR=/run/user/\$(id -u) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$(id -u)/bus
           export WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XAUTHORITY=\$(ls -1 \$HOME/.Xauthority /run/user/\$(id -u)/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
           $*"
+    vssh "bash -c $(printf '%q' "$script")"
 }
 vroot() { vssh "sudo -n bash -c $(printf '%q' "$*")"; }
 
@@ -75,4 +76,21 @@ venable_extensions() {   # venable_extensions uuid... : add to enabled-extension
 vrelogin() {   # the "log out and back in once": restart the display manager (autologin returns)
     vroot 'systemctl restart display-manager'
     sleep 20
+}
+
+# Run a command as root through the QEMU guest agent (no network or SSH needed).
+# Prints stdout+stderr; returns the command's exit code.
+vagent() {
+    local cmd="$1" pid st out i
+    pid="$(virsh -c qemu:///system qemu-agent-command "$VM" "$(python3 -c 'import json,sys; print(json.dumps({"execute":"guest-exec","arguments":{"path":"/bin/sh","arg":["-c",sys.argv[1]],"capture-output":True}}))' "$cmd")" \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["return"]["pid"])')" || return 1
+    for i in $(seq 120); do
+        st="$(virsh -c qemu:///system qemu-agent-command "$VM" "{\"execute\":\"guest-exec-status\",\"arguments\":{\"pid\":$pid}}")"
+        if python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)["return"]["exited"] else 1)' <<<"$st"; then
+            out="$(python3 -c 'import json,sys,base64; r=json.load(sys.stdin)["return"]; sys.stdout.write(base64.b64decode(r.get("out-data","")).decode(errors="replace") + base64.b64decode(r.get("err-data","")).decode(errors="replace")); sys.exit(r.get("exitcode",1))' <<<"$st")"
+            local rc=$?; printf '%s\n' "$out"; return $rc
+        fi
+        sleep 0.5
+    done
+    echo "vagent: timed out" >&2; return 1
 }

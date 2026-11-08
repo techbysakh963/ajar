@@ -56,11 +56,13 @@ HINT = {
 
 def gnome_toggle_active():
     """On GNOME 45+ the Quick Settings toggle does this job; don't show a second icon."""
-    try:
-        settings = Gio.Settings.new('org.gnome.shell')
-        return EXTENSION_UUID in settings.get_strv('enabled-extensions')
-    except Exception:  # schema missing: not GNOME
+    # Look the schema up first: Gio.Settings.new() on a missing schema does not raise, it
+    # aborts the whole process (and every non-GNOME desktop lacks this schema).
+    source = Gio.SettingsSchemaSource.get_default()
+    if source is None or source.lookup('org.gnome.shell', True) is None:
         return False
+    settings = Gio.Settings.new('org.gnome.shell')
+    return EXTENSION_UUID in settings.get_strv('enabled-extensions')
 
 
 def parse_status(text):
