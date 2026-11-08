@@ -78,7 +78,11 @@ vinstall_unsafe_helper() {
     local id=ajar-test-unsafe-mode@localhost
     vrun "mkdir -p ~/.local/share/gnome-shell/extensions/$id && cd ~/.local/share/gnome-shell/extensions/$id &&
       printf '%s' '{\"uuid\":\"$id\",\"name\":\"test-only unsafe mode\",\"description\":\"throwaway test VM only\",\"shell-version\":[\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\"]}' > metadata.json &&
-      printf '%s' 'export default class { enable() { global.context.unsafe_mode = true; } disable() { global.context.unsafe_mode = false; } }' > extension.js"
+      if [ \$(gnome-shell --version | grep -oE '[0-9]+' | head -1) -ge 45 ]; then
+        printf '%s' 'export default class { enable() { global.context.unsafe_mode = true; } disable() { global.context.unsafe_mode = false; } }' > extension.js
+      else   # GNOME 43/44: legacy (non-module) extension format
+        printf '%s' 'function init() { return { enable() { global.context.unsafe_mode = true; }, disable() { global.context.unsafe_mode = false; } }; }' > extension.js
+      fi"
 }
 venable_extensions() {   # venable_extensions uuid... : add to enabled-extensions (read at shell start)
     local u list
