@@ -8,31 +8,23 @@
 A switch for passwordless sudo on Linux desktops: GNOME, Xfce, KDE and the command line.</p>
 
 <p align="center">
+  <img src="screenshots/hero.jpg" width="800" alt="A real GNOME top bar: an amber open door glows next to the network, volume and power icons, meaning sudo is currently passwordless">
+</p>
+
+<p align="center">
   <a href="https://github.com/techbysakh963/ajar/actions/workflows/ci.yml"><img src="https://github.com/techbysakh963/ajar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/techbysakh963/ajar/releases/latest"><img src="https://img.shields.io/github/v/release/techbysakh963/ajar" alt="release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
-<p align="center"><img src="screenshots/demo.gif" width="720" alt="Turning Ajar on from GNOME Quick Settings: password dialog, then the amber door in the top bar"></p>
-
 You are about to run twenty `sudo` commands, or an AI agent is about to run them for you.
 Typing your password twenty times is pointless; leaving `NOPASSWD` in your sudoers forever is
 worse. **Ajar** is the middle ground:
 
-- **On** — sudo stops asking. An **amber door** sits in your top bar for as long as it lasts.
-- **Off** — sudo asks again. One click, no password, instant.
+- **On**: sudo stops asking, and an **amber door** sits in your top bar for as long as it lasts.
+- **Off**: sudo asks again. One click, no password, instant.
 - Turning on **always** asks for your password (polkit). Nothing can turn it on behind your back.
-- Optional reminder: *"Passwordless sudo has been on for 30 min"* with a **Turn off** button.
-
-## Screenshots
-
-| GNOME (Ubuntu, Debian) | Xfce (Kali) |
-|---|---|
-| <img src="screenshots/gnome-quick-settings.png" alt="Quick Settings with the Sudo toggle on" width="420"> | <img src="screenshots/kali-xfce-tray.png" alt="Kali Xfce panel with the Ajar tray menu" width="420"> |
-| <img src="screenshots/gnome-menu.png" alt="Toggle menu with reminder options" width="420"> | <img src="screenshots/reminder.png" alt="Reminder notification with Turn off button" width="420"> |
-
-All screenshots are from real desktops, not mock-ups: GNOME Shell 50 (Ubuntu 26.04),
-GNOME 48 (Debian 13), Xfce (Kali rolling). See [screenshots/README.md](screenshots/README.md).
+- Optional reminder: *"Passwordless sudo has been on for 19 min"*, with a **Turn off** button.
 
 ## Install
 
@@ -62,6 +54,27 @@ truncated download runs nothing. Prefer to read first? `curl -fsSLO …/install.
 
 **On GNOME (Wayland), log out and back in once** after installing. GNOME cannot load a new
 extension into a running session. Then find **Sudo** in Quick Settings.
+
+## See it work
+
+<p align="center">
+  <img src="screenshots/demo.gif" width="720" alt="Quick Settings, click Sudo, the polkit password dialog, then the amber door in the top bar and the Sudo tile reading No password">
+</p>
+
+<table>
+  <tr>
+    <td width="52%" valign="top"><img src="screenshots/gnome-menu.png" alt="GNOME Quick Settings: the Sudo tile reads No password, and its menu offers reminders with a plain warning"><br><sub><b>GNOME:</b> one tile in Quick Settings. Its menu offers reminders, and says plainly what "on" means.</sub></td>
+    <td width="48%" valign="top"><img src="screenshots/gnome-password-dialog.png" alt="The system polkit password dialog asking to let sudo run without a password"><br><sub>Turning on is the system's own password dialog. Every time.</sub><br><br><img src="screenshots/reminder.png" alt="Notification: Passwordless sudo has been on for 19 min, with Turn off and Remind me in 15m buttons"><br><sub>The reminder asks; it never cuts sudo off mid-task.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="screenshots/kali-xfce-tray.png" alt="Kali Linux Xfce panel with the Ajar tray menu open"><br><sub><b>Xfce, KDE, MATE and others:</b> a tray icon. Kali shown.</sub></td>
+    <td valign="top"><img src="screenshots/kali-xfce-dialog.png" alt="Kali's polkit dialog asking to let sudo run without a password"><br><sub>Same password gate on every desktop.</sub></td>
+  </tr>
+</table>
+
+<sub>Real captures, not mock-ups: Ubuntu 24.04 (GNOME 46, HiDPI) and Kali 2026.3 (Xfce), in virtual
+machines. Also tested on Ubuntu 26.04 (GNOME 50), Debian 13 (GNOME 48) and Debian 12 (GNOME 43).
+How they were made: [screenshots/README.md](screenshots/README.md).</sub>
 
 ## Use
 
