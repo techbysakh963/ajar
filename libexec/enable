@@ -1,0 +1,40 @@
+#!/bin/bash
+# Ajar privileged helper: turn ON passwordless sudo for the user who ran pkexec.
+#
+# Runs as root, only through pkexec (polkit action io.github.techbysakh963.ajar.enable,
+# which always requires admin authentication). Takes no arguments and trusts nothing from
+# the caller except PKEXEC_UID, which pkexec sets itself and the caller cannot forge.
+#
+# Effect: writes /etc/sudoers.d/90-ajar-<user> containing exactly
+#     <user> ALL=(ALL) NOPASSWD: ALL
+# validated with `visudo -cf` before it becomes visible to sudo.
+set -euo pipefail
+umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+readonly DIR=/etc/sudoers.d
+
+die() { echo "ajar: $*" >&2; logger -t ajar -p auth.warning "enable refused: $*" || true; exit 1; }
+
+[[ $# -eq 0 ]] || die "takes no arguments"
+[[ $EUID -eq 0 ]] || die "must run as root (through pkexec)"
+uid="${PKEXEC_UID:-}"
+[[ "$uid" =~ ^[0-9]+$ ]] || die "must be started through pkexec"
+[[ "$uid" -ne 0 ]] || die "refusing to configure root"
+
+user="$(getent passwd "$uid" | cut -d: -f1)"
+# Strict on purpose: the name becomes part of a sudoers line and a file name.
+[[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "unsupported user name for uid $uid"
+
+[[ -d "$DIR" && ! -L "$DIR" ]] || die "$DIR is missing; is sudo installed?"
+[[ "$(stat -c '%u %a' "$DIR")" =~ ^0\ 7[0-5][0-5]$ ]] || die "$DIR has unsafe ownership or mode"
+
+target="$DIR/90-ajar-$user"
+# sudo ignores names containing a dot, so the temp file is inert until validated and renamed.
+tmp="$(mktemp "$DIR/.ajar.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+printf '# Managed by Ajar. Remove with: ajar off\n%s ALL=(ALL) NOPASSWD: ALL\n' "$user" > "$tmp"
+chmod 0440 "$tmp"
+visudo -cf "$tmp" >/dev/null || die "generated rule failed visudo validation"
+mv -f "$tmp" "$target"
+trap - EXIT
+logger -t ajar -p auth.notice "passwordless sudo ENABLED for $user (uid $uid)"

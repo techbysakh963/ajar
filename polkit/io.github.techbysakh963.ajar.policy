@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Ajar</vendor>
+  <vendor_url>https://github.com/techbysakh963/ajar</vendor_url>
+
+  <!-- Granting root without a password: always ask for an administrator's password,
+       from every kind of session. auth_admin (not auth_admin_keep) so it is asked every time. -->
+  <action id="io.github.techbysakh963.ajar.enable">
+    <description>Turn on passwordless sudo</description>
+    <message>Ajar: authenticate to let sudo run without a password</message>
+    <icon_name>ajar-open-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/ajar/enable</annotate>
+  </action>
+
+  <!-- Removing access: free only for the user at the active local seat.
+       Remote (allow_any) and inactive sessions must authenticate. -->
+  <action id="io.github.techbysakh963.ajar.disable">
+    <description>Turn off passwordless sudo</description>
+    <message>Ajar: authenticate to turn off passwordless sudo</message>
+    <icon_name>ajar-closed-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/ajar/disable</annotate>
+  </action>
+</policyconfig>
