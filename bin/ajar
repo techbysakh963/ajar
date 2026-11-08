@@ -100,9 +100,13 @@ read_state() {
     fi
 }
 
-reminder_due() {   # prints the reminder's next trigger time, or nothing
-    systemctl --user show "$UNIT.timer" -p NextElapseUSecRealtime --value 2>/dev/null \
-        | grep -v '^n/a$' | grep -v '^$' || true
+reminder_due() {   # prints the reminder's next trigger time (ISO 8601), or nothing
+    # An --on-active timer has only a monotonic deadline; list-timers reports it as wall-clock µs.
+    local next
+    next="$(systemctl --user list-timers "$UNIT.timer" --output=json --no-pager 2>/dev/null \
+        | grep -oE '"next":[0-9]+' | head -1 | cut -d: -f2)"
+    [[ "$next" =~ ^[0-9]+$ ]] && (( next > 0 )) && date -d "@$(( next / 1000000 ))" -Iseconds
+    return 0
 }
 
 json_str() { local s="${1//\\/\\\\}"; s="${s//\"/\\\"}"; printf '"%s"' "$s"; }
