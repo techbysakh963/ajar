@@ -8,7 +8,6 @@ cd "$(dirname "$0")/.."
 RAW=screenshots/raw
 OUT=screenshots
 U="$RAW/ubuntu24.04-gnome46-hidpi"     # 3840x2160 at 2x, captured area: logical x 640.., y 0..
-K="$RAW/kali-xfce"                      # 1280x800 at 1x
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
 # card <in> <out> <radius> [shadow-opacity]: rounded corners + soft shadow, transparent around
@@ -29,25 +28,6 @@ magick -size 1600x480 radial-gradient:'#232631-#111317' \
     -compose Over -composite "$tmp/strip-card.png" -gravity center -composite -strip \
     -sampling-factor 4:4:4 -quality 92 "$OUT/hero.jpg"     # JPEG: a soft glow is 30 KB, not 770
 
-# --- context shot (kept for later, not in the README yet) -------------------------------------
-magick "$U/k6-qs-on.png" -crop 1000x660+1560+0 +repage "$tmp/qs.png"
-card "$tmp/qs.png" "$tmp/qs-card.png" 30 60
-magick -size 1600x820 radial-gradient:'#232631-#111317' \
-    \( -size 1600x820 xc:none -fill 'rgba(255,176,0,0.24)' -draw "circle 1000,170 1000,330" -blur 0x110 \) \
-    -compose Over -composite "$tmp/qs-card.png" -gravity center -composite -strip \
-    -sampling-factor 4:4:4 -quality 92 "$OUT/hero-context.jpg"
-
-# --- GNOME cards (transparent, work on GitHub light and dark) ---------------------------------
-magick "$U/k7-qs-menu.png"      -crop 1000x1060+1560+0  +repage "$tmp/b.png"; card "$tmp/b.png" "$OUT/gnome-menu.png" 30
-magick "$U/k3-dialog-typed.png" -crop 824x772+228+692   +repage "$tmp/c.png"; card "$tmp/c.png" "$OUT/gnome-password-dialog.png" 24
-if [[ -f "$U/reminder.png" ]]; then
-    magick "$U/reminder.png" -crop 1000x314+286+71 +repage "$tmp/d.png"; card "$tmp/d.png" "$OUT/reminder.png" 24
-fi
-
-# --- Kali Xfce cards ---------------------------------------------------------------------------
-magick "$K/kali-01-tray-menu.png"     -crop 520x220+760+0  +repage "$tmp/e.png"; card "$tmp/e.png" "$OUT/kali-xfce-tray.png" 14
-magick "$K/kali-02-polkit-dialog.png" -crop 530x250+380+322 +repage "$tmp/f.png"; card "$tmp/f.png" "$OUT/kali-xfce-dialog.png" 14
-
 # --- demo loop: real frames of one run, crossfaded --------------------------------------------
 # terminal: sudo asks for a password -> Quick Settings: Sudo off -> polkit dialog -> password ->
 # Sudo on (amber door) -> terminal: the same command runs as root without asking.
@@ -66,9 +46,9 @@ for (( i=1; i<${#frames[@]}; i++ )); do
     filt+="[$prev][$i:v]xfade=transition=fade:duration=$fade:offset=${off}[x$i];"; prev="x$i"
 done
 ffmpeg -loglevel error -y "${args[@]}" -filter_complex "${filt}[$prev]fps=20,format=yuv420p[v]" -map "[v]" \
-    -c:v libx264 -crf 22 -movflags +faststart "$OUT/demo.mp4"
-ffmpeg -loglevel error -y -i "$OUT/demo.mp4" \
+    -c:v libx264 -crf 22 "$tmp/demo.mp4"
+ffmpeg -loglevel error -y -i "$tmp/demo.mp4" \
     -vf "fps=10,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" \
     -loop 0 "$OUT/demo.gif"
 
-ls -l "$OUT"/*.png "$OUT"/*.jpg "$OUT"/demo.*
+ls -l "$OUT"/hero.jpg "$OUT"/demo.gif
