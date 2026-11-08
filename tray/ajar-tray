@@ -26,10 +26,16 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 DEV_ICONS = os.path.join(HERE, '..', 'data', 'icons', 'hicolor', 'scalable')
 # Absolute paths only (never PATH): see gnome-extension/ajarClient.js. A dev checkout uses
 # its own bin/ajar, found relative to this file, not through the environment.
-_DEV_AJAR = os.path.realpath(os.path.join(HERE, '..', 'bin', 'ajar'))
-AJAR = next((p for p in (_DEV_AJAR, '/usr/bin/ajar', '/usr/local/bin/ajar')
-             if os.access(p, os.X_OK) and (p != _DEV_AJAR or os.path.exists(os.path.join(HERE, '..', '.git')))),
-            '/usr/bin/ajar')
+def find_ajar():
+    if os.path.isdir(os.path.join(HERE, '..', '.git')):          # running from a checkout
+        return os.path.realpath(os.path.join(HERE, '..', 'bin', 'ajar'))
+    for p in ('/usr/bin/ajar', '/usr/local/bin/ajar'):            # installed (.deb / script)
+        if os.access(p, os.X_OK):
+            return p
+    return '/usr/bin/ajar'
+
+
+AJAR = find_ajar()
 
 ICON = {  # open states use a full-colour amber icon so every panel shows the warning colour
     'on': 'ajar-tray-open', 'external': 'ajar-tray-external', 'unknown': 'ajar-tray-external',

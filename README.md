@@ -123,10 +123,12 @@ state visible (amber door), temporary by habit (one click to close), and reminds
 that loses sudo mid-task can leave your system half-configured. The reminder *asks* you
 instead. See [SECURITY.md](SECURITY.md#what-ajar-does-not-protect).
 
-**Kali gives me passwordless sudo already. Does Ajar notice?** Yes: it shows *"open by
-another rule"*. Kali grants it through the `kali-trusted` group; `install.sh --lockdown`
-removes you from that group so Ajar is the only switch. It refuses if that would leave you
-without any working sudo.
+**I enabled Kali's passwordless sudo (`kali-grant-root`). Does Ajar notice?** Yes: it shows
+*"open by another rule"*. A stock Kali install asks for a password; the opt-in
+(`sudo dpkg-reconfigure kali-grant-root` → enable) puts every `sudo` member into the
+`kali-trusted` group. `install.sh --lockdown` takes you out of that group so Ajar is the only
+switch (it refuses if that would leave you without working sudo). Choosing *enable* in
+`dpkg-reconfigure kali-grant-root` again later puts you back.
 
 **Debian says "pkexec: command not found".** Debian 12+ ships it separately:
 `sudo apt install pkexec` (the `.deb` pulls it in for you).

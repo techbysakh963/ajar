@@ -249,10 +249,12 @@ report_environment() {
     if [[ -n "$user" ]] && ! id -nG "$user" | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'; then
         warn "$user is not in the sudo group: turning Ajar on will ask for the ROOT password."
     else say "  ok  admin group membership"; fi
-    if [[ -n "${XDG_CURRENT_DESKTOP:-}" ]] && ! pgrep -l '^(gnome-shell|polkit-gnome-au|polkit-kde-auth|polkit-mate-aut|lxpolkit|lxqt-policykit|xfce-polkit|mate-polkit|cinnamon)$' >/dev/null; then
+    if pgrep -l '^(gnome-shell|polkit-gnome-au|polkit-kde-auth|polkit-mate-aut|lxpolkit|lxqt-policykit|xfce-polkit|mate-polkit|cinnamon)$' >/dev/null; then
+        say "  ok  polkit authentication agent"
+    elif [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then
         warn "no graphical polkit agent is running: the tray cannot show a password dialog."
-        warn "  Install one, e.g.: sudo apt install policykit-1-gnome  (Xfce, LXDE and others)"
-    else say "  ok  polkit authentication agent"; fi
+        warn "  Install one, e.g.: sudo apt install mate-polkit  (Xfce, LXDE and others)"
+    else say "  --  polkit agent not checked (no desktop session here, e.g. SSH)"; fi
     if (( gnome_ver > 0 && gnome_ver < 45 )); then
         warn "GNOME $gnome_ver is older than 45: you get the tray icon, not the Quick Settings toggle."
         warn "  GNOME needs an AppIndicator extension to show tray icons (gnome-shell-extension-appindicator)."
@@ -296,7 +298,10 @@ find_other_grants() {
         found=1
     # the glob must expand as root: /etc/sudoers.d may not be readable by the user
     done < <($SUDO sh -c 'grep -nHE "^[[:space:]]*[^#].*NOPASSWD|!authenticate" /etc/sudoers /etc/sudoers.d/* 2>/dev/null' \
-             | grep -E "(^|[[:space:]:])(${ure}|%[a-z_-]+|ALL)[[:space:]]" || true)
+             | awk -v u="$user" -v groups=" $(id -nG "$user") " -F: '{
+                   split($0, p, ":"); rest = substr($0, length(p[1]) + length(p[2]) + 3)
+                   n = split(rest, w, /[ \t]+/); who = (w[1] == "" ? w[2] : w[1])
+                   if (who == u || who == "ALL" || (who ~ /^%/ && index(groups, " " substr(who, 2) " "))) print }' || true)
     (( found )) || say "  none found"
 }
 
