@@ -1,0 +1,9 @@
+# Sudo version 1.9.16p2
+Matching Defaults entries for alice on eafdb7186c90:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin,
+    use_pty, !authenticate
+
+User alice may run the following commands on eafdb7186c90:
+    (ALL : ALL) ALL
+# exit=0

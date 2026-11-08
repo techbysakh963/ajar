@@ -1,0 +1,5 @@
+# sudo-rs 0.2.13-0ubuntu1.2
+User alice may run the following commands on 846775a6bc7b:
+    (ALL : ALL) ALL
+    (ALL) NOPASSWD: ALL
+# exit=0

@@ -1,0 +1,19 @@
+### debconf + files of kali-grant-root
+  kali-grant-root/policy: no change
+total 16
+drwxr-xr-x 2 root root 4096 Nov  8 19:55 .
+drwxr-xr-x 1 root root 4096 Nov  8 19:55 ..
+-r--r----- 1 root root  134 Nov  8  2024 kali-grant-root
+--- /etc/sudoers.d/kali-grant-root
+# Allow members of group kali-trusted to execute any command without a
+# password prompt
+%kali-trusted   ALL=(ALL:ALL) NOPASSWD: ALL
+
+Version: 2024.4.0
+Description: Configuration controlling privilege escalation to root
+Description-md5: 
+--- reverse depends (who pulls it in)
+kali-grant-root
+Reverse Depends:
+  kali-desktop-core
+  kali-menu

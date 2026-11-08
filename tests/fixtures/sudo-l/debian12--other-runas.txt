@@ -1,0 +1,10 @@
+# Sudo version 1.9.13p3
+Matching Defaults entries for alice on abb7bc873d4c:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin,
+    use_pty
+
+User alice may run the following commands on abb7bc873d4c:
+    (ALL : ALL) ALL
+    (nobody) NOPASSWD: ALL
+# exit=0

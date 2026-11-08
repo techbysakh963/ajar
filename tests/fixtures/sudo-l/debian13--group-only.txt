@@ -1,0 +1,3 @@
+# Sudo version 1.9.16p2
+sudo: a password is required
+# exit=1

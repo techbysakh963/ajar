@@ -1,0 +1,10 @@
+# Sudo version 1.9.15p5
+Matching Defaults entries for alice on 6c18966ed34f:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin,
+    use_pty
+
+User alice may run the following commands on 6c18966ed34f:
+    (ALL : ALL) ALL
+    (ALL) NOPASSWD: /usr/bin/id, PASSWD: ALL
+# exit=0

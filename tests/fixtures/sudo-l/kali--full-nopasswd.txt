@@ -1,0 +1,11 @@
+# Sudo version 1.9.17p2
+Matching Defaults entries for alice on 9619c0c1665a:
+    secure_path=/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+Runas and Command-specific defaults for alice:
+    Defaults!/usr/sbin/visudo env_keep+="SUDO_EDITOR EDITOR VISUAL"
+
+User alice may run the following commands on 9619c0c1665a:
+    (ALL : ALL) ALL
+    (ALL) NOPASSWD: ALL
+# exit=0
