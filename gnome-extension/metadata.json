@@ -1,0 +1,8 @@
+{
+  "uuid": "ajar@techbysakh963.github.io",
+  "name": "Ajar",
+  "description": "Quick Settings toggle for passwordless sudo. On: sudo runs without a password, and an amber door in the top bar reminds you. Off: sudo asks for your password. Turning on always asks for your password; turning off never does. Needs the ajar command (see the project page).",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/techbysakh963/ajar",
+  "version-name": "1.0.0"
+}
