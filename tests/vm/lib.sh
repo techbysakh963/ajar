@@ -15,7 +15,18 @@ VUSER="${VUSER:-demo}"
 _K=(-i "$VMDIR/id_ed25519" -o UserKnownHostsFile="$VMDIR/known_hosts" -o StrictHostKeyChecking=no
     -o ConnectTimeout=5 -o BatchMode=yes -o LogLevel=ERROR)
 
-vip() { virsh -c qemu:///system domifaddr "$VM" 2>/dev/null | awk '/ipv4/{split($4,a,"/"); print a[1]; exit}'; }
+# Ask the guest itself (QEMU guest agent) first: after a desktop install NetworkManager takes
+# a second DHCP lease, and both the lease list and the host ARP table can name a stale address.
+vip() {
+    local ip src
+    ip="$(virsh -c qemu:///system domifaddr "$VM" --source agent 2>/dev/null \
+          | awk '/ipv4/ && $4 !~ /^127\./{split($4,a,"/"); print a[1]; exit}')"
+    [[ -n "$ip" ]] && { echo "$ip"; return; }
+    for src in arp lease; do
+        ip="$(virsh -c qemu:///system domifaddr "$VM" --source "$src" 2>/dev/null | awk '/ipv4/{split($4,a,"/"); print a[1]; exit}')"
+        [[ -n "$ip" ]] && { echo "$ip"; return; }
+    done
+}
 # shellcheck disable=SC2029  # intended: callers build the remote command line
 vssh() { ssh "${_K[@]}" "$VUSER@$(vip)" "$@"; }
 

@@ -32,7 +32,9 @@ trap 'rec_stop' EXIT
 [[ "$(state)" == off ]] || { vrun 'ajar off' >/dev/null; wait_state off; }
 # a clean desktop: no first-run welcome window, no leftover notifications
 vrun 'mkdir -p ~/.config && echo yes > ~/.config/gnome-initial-setup-done; pkill -f '^/usr/libexec/gnome-initial-setup'; true'
-veval 'Main.messageTray._notificationQueue?.forEach?.(n => n.destroy()); Main.panel.statusArea.dateMenu._messageList?._sectionList?.get_children?.().forEach?.(s => s.clear?.()); "ok"' >/dev/null || true
+# other apps' banners queue ahead of ours (GNOME shows one at a time): silence and clear them
+vrun 'gsettings set org.gnome.software download-updates-notify false 2>/dev/null; gsettings set org.gnome.software allow-updates false 2>/dev/null; pkill -x gnome-software; true'
+veval 'Main.messageTray.getSources().forEach(s => s.destroy()); "ok"' >/dev/null || true
 qs_close; sleep 1
 
 rec_start
