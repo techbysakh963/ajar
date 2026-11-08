@@ -174,7 +174,7 @@ notify() {
 
 on_since() {   # "HH:MM" and minutes since Ajar's rule was written (file mtime is user-visible)
     local t; t="$(stat -c %Y "$(rule_file)" 2>/dev/null)" || return 1
-    printf '%s %s' "$(date -d "@$t" +%H:%M)" "$(( ($(date +%s) - t) / 60 ))"
+    printf '%s %s\n' "$(date -d "@$t" +%H:%M)" "$(( ($(date +%s) - t) / 60 ))"
 }
 
 valid_duration() { [[ "$1" =~ ^([0-9]+[smh])+$ ]]; }
@@ -192,7 +192,6 @@ cmd_remind() {
     say "Reminder set: you will be notified in $arg if passwordless sudo is still on."
 }
 
-# Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
 ask_helper() {   # locate share/ajar-ask (installed or in a dev checkout)
     local d
     for d in /usr/share/ajar /usr/local/share/ajar "$(dirname "$(readlink -f "$0")")/../share"; do
@@ -202,7 +201,6 @@ ask_helper() {   # locate share/ajar-ask (installed or in a dev checkout)
 }
 
 # ask_with_actions <icon> <title> <body> <key> <label> [...]: prints the chosen key or nothing.
-# shellcheck disable=SC2329  # called inside $( ) in cmd_fire_reminder
 # Replaces the previous Ajar notification and remembers the new id.
 ask_with_actions() {
     local icon="$1" title="$2" body="$3"; shift 3
@@ -212,42 +210,6 @@ ask_with_actions() {
     [[ "$rid" =~ ^[0-9]+$ ]] || rid=0
     out="$(AJAR_ID_FILE="${XDG_RUNTIME_DIR:+$idf}" "$helper" "$(icon_file "$icon")" "$title" "$body" "$rid" "$@")" || return 1
     [[ "$out" == *$'\n'* ]] && printf '%s\n' "${out#*$'\n'}"
-    return 0
-}
-
-# Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
-gv_str() {   # quote a value as a GVariant string literal for gdbus
-    local v="${1//\\/\\\\}"; v="${v//\'/\\\'}"; printf "'%s'" "$v"
-}
-
-# ask_with_actions <icon> <title> <body> <key> <label> [<key> <label>...]
-# Shows a notification with buttons through the freedesktop Notifications D-Bus API and
-# prints the chosen key (nothing if dismissed). Uses gdbus directly: libnotify's notify-send
-# refuses actions on some systems (it routes through the portal), even when the server
-# supports them.
-ask_with_actions() {
-    local icon="$1" title="$2" body="$3"; shift 3
-    local actions="" id="" rid=0 line idf="${XDG_RUNTIME_DIR:-/nonexistent}/ajar-notification-id"
-    while (( $# >= 2 )); do actions+="${actions:+, }$(gv_str "$1"), $(gv_str "$2")"; shift 2; done
-    [[ -f "$idf" ]] && rid="$(<"$idf")"; [[ "$rid" =~ ^[0-9]+$ ]] || rid=0
-    local dest=(--session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications)
-
-    coproc MON { exec gdbus monitor "${dest[@]}" 2>/dev/null; }   # listen before sending
-    sleep 0.3
-    id="$(gdbus call "${dest[@]}" --method org.freedesktop.Notifications.Notify \
-        Ajar "$rid" "$(gv_str "$(icon_file "$icon")")" "$(gv_str "$title")" "$(gv_str "$body")" \
-        "[$actions]" "{'urgency': <byte 2>, 'resident': <true>, 'desktop-entry': <'io.github.techbysakh963.Ajar'>}" \
-        0 2>/dev/null | grep -oE '[0-9]+' | head -1)"
-    if [[ -z "$id" ]]; then kill "$MON_PID" 2>/dev/null; return 1; fi
-    [[ "$idf" != /nonexistent/* ]] && printf '%s' "$id" > "$idf"
-    while IFS= read -r line <&"${MON[0]}"; do
-        if [[ "$line" =~ ActionInvoked\ \(uint32\ $id,\ \'([a-z]+)\'\) ]]; then
-            printf '%s\n' "${BASH_REMATCH[1]}"; break
-        elif [[ "$line" =~ NotificationClosed\ \(uint32\ $id, ]]; then
-            break
-        fi
-    done
-    kill "$MON_PID" 2>/dev/null
     return 0
 }
 
