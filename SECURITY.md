@@ -89,16 +89,6 @@ Ajar's job is to make that state **deliberate, visible and easy to end**, not to
   embeds the SHA-256 of that release's tarball and refuses anything else.
 - Release assets are pinned to a version tag. `SHA256SUMS` is published alongside them.
 
-## Review history
-
-Before 1.0.0, every privileged script was reviewed independently (the reviewer saw the code,
-not our reasoning). No critical issues. Fixed as a result, each with a regression test:
-removing the `.deb` from Synaptic or `pkexec apt` left passwordless sudo on (reproduced, then
-fixed); enable could grant sudo to a user without it; `BASH_ENV`/`PATH` could steer which
-program asked for the password (reproduced); lockdown could remove a password-less user's
-only route to root; the uninstall manifest allowlist was too broad; and smaller correctness
-issues. The list is in the git history (`git log --grep=review`).
-
 ## How it is tested
 
 What CI checks on every push: shellcheck on every shell script; no shell function defined twice

@@ -41,8 +41,7 @@ Recording parser fixtures for a new distribution or sudo version:
    request, and a matching test in `tests/matrix.sh` or `tests/e2e.sh`.
 3. **The displayed state must come from sudo.** Never cache or assume it.
 4. **Do not silence shellcheck to make it pass.** If a warning is wrong, say why in a comment
-   next to the `disable` line. (We once silenced "this function is never invoked"; it was
-   true, and the reminder's Turn off button was dead until we noticed.)
+   next to the `disable` line.
 5. Keep commits small, and say *why* in the message.
 
 ## Releasing

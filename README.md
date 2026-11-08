@@ -61,8 +61,6 @@ extension into a running session. Then find **Sudo** in Quick Settings.
   <img src="screenshots/demo.gif" width="720" alt="A terminal: sudo whoami asks for a password. Quick Settings: click Sudo, the system password dialog, Sudo now reads No password and an amber door appears in the top bar. The terminal again: sudo whoami prints root without asking.">
 </p>
 
-<p align="center"><sub>Real captures from Ubuntu 24.04 (GNOME 46). How they were made: <a href="screenshots/README.md">screenshots/README.md</a></sub></p>
-
 ## Use
 
 | | GNOME 45 – 50 | Xfce, KDE, MATE, Cinnamon, GNOME 43/44 | Terminal |
