@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- companion to the app icon: same door, shut, no light -->
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="#15171c"/>
+  <path d="M42 26h44v74H42z" fill="#2a2e37"/>
+  <path d="M48 32h32v30H48z M48 68h32v26H48z" fill="none" stroke="#353a45" stroke-width="2"/>
+  <circle cx="78" cy="64" r="2.6" fill="#8a8f99"/>
+  <path d="M36 102V20h56v82" fill="none" stroke="#e9e6df" stroke-width="6" stroke-linejoin="round"/>
+</svg>

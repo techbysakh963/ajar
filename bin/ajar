@@ -137,9 +137,42 @@ cmd_status() {
 
 # ------------------------------------------------------------- notify -----
 
-notify() {   # notify <urgency> <title> <body>
+# Resolve an icon to a file path: installed theme locations first, then a dev checkout.
+# A path always renders; a bare name shows a broken image when the icon isn't installed.
+icon_file() {
+    local name="$1" d sub
+    local dirs="${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    local IFS=:
+    for d in $dirs "$(dirname "$(readlink -f "$0")")/../data"; do
+        for sub in apps status; do
+            [[ -f "$d/icons/hicolor/scalable/$sub/$name.svg" ]] && { printf '%s' "$d/icons/hicolor/scalable/$sub/$name.svg"; return; }
+        done
+    done
+    printf '%s' "$name"
+}
+
+# notify <urgency> <icon> <title> <body> [notify-send args...]
+# Every Ajar notification replaces the previous one, so an old "is on" never lingers
+# after turning off. The id lives in $XDG_RUNTIME_DIR (private to the user).
+notify() {
     command -v notify-send >/dev/null || return 0
-    notify-send -a Ajar -u "$1" -i ajar-open-symbolic "$2" "$3" 2>/dev/null || true
+    local urgency="$1" icon="$2" title="$3" body="$4"; shift 4
+    local idf="" id="" new
+    local -a replace=()
+    if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "$XDG_RUNTIME_DIR" ]]; then
+        idf="$XDG_RUNTIME_DIR/ajar-notification-id"
+        [[ -f "$idf" ]] && id="$(<"$idf")"
+        [[ "$id" =~ ^[0-9]+$ ]] && replace=(-r "$id")
+    fi
+    new="$(notify-send -p "${replace[@]}" -a Ajar -u "$urgency" -i "$(icon_file "$icon")" "$@" "$title" "$body" 2>/dev/null)"
+    new="${new%%$'\n'*}"
+    [[ -n "$idf" && "$new" =~ ^[0-9]+$ ]] && printf '%s' "$new" > "$idf"
+    return 0
+}
+
+on_since() {   # "HH:MM" and minutes since Ajar's rule was written (file mtime is user-visible)
+    local t; t="$(stat -c %Y "$(rule_file)" 2>/dev/null)" || return 1
+    printf '%s %s' "$(date -d "@$t" +%H:%M)" "$(( ($(date +%s) - t) / 60 ))"
 }
 
 valid_duration() { [[ "$1" =~ ^([0-9]+[smh])+$ ]]; }
@@ -159,15 +192,22 @@ cmd_remind() {
 
 # Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
 cmd_fire_reminder() {
-    local again="${1:-30m}" choice
+    local again="${1:-30m}" since mins title choice
     read_state
     [[ "$STATE" == on ]] || return 0
     log "reminder: passwordless sudo is still ON"
-    if ! command -v notify-send >/dev/null; then return 0; fi
-    choice="$(notify-send -a Ajar -u critical -i ajar-open-symbolic \
+    command -v notify-send >/dev/null || return 0
+    if read -r since mins < <(on_since); then
+        title="Passwordless sudo has been on for $mins min"
+    else
+        title="Passwordless sudo is still on"
+    fi
+    # Replaces the "is on" notification, then blocks until the user picks an action or
+    # dismisses it (this runs in the user's timer unit, not in a terminal).
+    choice="$(notify-send -a Ajar -u critical -i "$(icon_file io.github.techbysakh963.Ajar)" \
+        -r "$(cat "${XDG_RUNTIME_DIR:-/nonexistent}/ajar-notification-id" 2>/dev/null || echo 0)" \
         -A off="Turn off" -A again="Remind me in $again" \
-        "Passwordless sudo is still on" \
-        "Any program running as $(me) can become root without asking." 2>/dev/null)"
+        "$title" "Since ${since:-earlier}. Any program running as $(me) can become root without asking." 2>/dev/null)"
     case "$choice" in
         off)   cmd_off ;;
         again) cmd_remind "$again" >/dev/null ;;
@@ -209,7 +249,8 @@ cmd_on() {
     case "$STATE" in
         on)
             say "ON: sudo runs without a password for $(me)."
-            notify normal "Passwordless sudo is on" "Any program running as $(me) can now become root without asking."
+            notify normal io.github.techbysakh963.Ajar "Passwordless sudo is on" \
+                "sudo won't ask for a password until you turn it off. Any program running as $(me) can become root."
             ;;
         stale)
             err "Ajar's rule was written but sudo still asks for a password: a later sudoers rule overrides it. Run 'ajar doctor'."
@@ -234,7 +275,8 @@ cmd_off() {
         read_state
     fi
     case "$STATE" in
-        off|stale) say "OFF: sudo asks for a password." ;;
+        off|stale) say "OFF: sudo asks for a password."
+                   notify low io.github.techbysakh963.Ajar-closed "Passwordless sudo is off" "sudo asks for your password again." ;;
         external)  say "Ajar's rule is off, but another sudoers rule still gives $(me) passwordless sudo."
                    say "  Run 'ajar doctor' to find it."; return 5 ;;
         on)        err "still on after disabling; this should not happen. See: journalctl -t ajar"; return 4 ;;
