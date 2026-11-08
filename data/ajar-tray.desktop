@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ajar tray icon
+Comment=Passwordless sudo switch in the panel
+Icon=io.github.techbysakh963.Ajar
+Exec=ajar-tray
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

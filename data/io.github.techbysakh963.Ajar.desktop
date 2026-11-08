@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Ajar
+Comment=Switch passwordless sudo on and off
+Icon=io.github.techbysakh963.Ajar
+Exec=ajar-tray --force
+Terminal=false
+Categories=Settings;Security;
+Keywords=sudo;root;password;polkit;
+NoDisplay=false
