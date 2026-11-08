@@ -1,0 +1,51 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck gjs desktop-file-utils
+      - name: Static checks (shellcheck, duplicate functions, Python/JS/JSON syntax)
+        run: tests/static.sh
+      - name: Desktop entries
+        run: desktop-file-validate data/*.desktop
+      - name: sudo -l parser against recorded output from five distros
+        run: tests/parser.sh
+      - name: GNOME toggle logic (gjs)
+        run: gjs -m tests/unit.js
+
+  distro-matrix:
+    needs: lint-and-unit
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "debian:13", "kalilinux/kali-rolling", "ubuntu:24.04", "ubuntu:26.04"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer, lockdown, helpers, state machine, uninstall
+        run: tests/matrix.sh "${{ matrix.image }}"
+      - name: Build the .deb
+        run: tools/build-deb.sh
+      - name: .deb install / remove / purge
+        run: tests/deb-matrix.sh "${{ matrix.image }}"
+
+  curl-pipe:
+    needs: lint-and-unit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release assets from this commit
+        run: tools/make-release.sh
+      - name: curl | bash (good, tampered, truncated, --yes, no tty)
+        run: tests/curl-pipe.sh debian:12
+
+# Not run here, by design: turning Ajar ON through the real polkit password dialog.
+# See SECURITY.md, "How it is tested".

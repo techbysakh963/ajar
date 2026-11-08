@@ -1,0 +1,19 @@
+name: Desktop or distribution support
+description: Ajar does not show up, or looks wrong, on your desktop
+labels: [desktop-support]
+body:
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop and version (echo $XDG_CURRENT_DESKTOP; gnome-shell --version; xfce4-panel --version)
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you see? A screenshot helps.
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `ajar doctor`
+      render: text

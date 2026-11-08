@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in Ajar does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problem?** Do not file it here. Use Security → Report a vulnerability (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `ajar doctor`
+      render: text
+    validations: { required: true }
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `ajar status --json` and `journalctl -t ajar -n 20 --no-pager`
+      render: text
+  - type: input
+    id: system
+    attributes:
+      label: Distribution, desktop and version (e.g. Kali rolling, Xfce 4.20)
+    validations: { required: true }
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install Ajar?
+      options: [".deb", "install.sh (curl | bash)", "install.sh from a checkout"]
+    validations: { required: true }
