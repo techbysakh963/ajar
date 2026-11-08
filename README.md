@@ -58,23 +58,10 @@ extension into a running session. Then find **Sudo** in Quick Settings.
 ## See it work
 
 <p align="center">
-  <img src="screenshots/demo.gif" width="720" alt="Quick Settings, click Sudo, the polkit password dialog, then the amber door in the top bar and the Sudo tile reading No password">
+  <img src="screenshots/demo.gif" width="720" alt="A terminal: sudo whoami asks for a password. Quick Settings: click Sudo, the system password dialog, Sudo now reads No password and an amber door appears in the top bar. The terminal again: sudo whoami prints root without asking.">
 </p>
 
-<table>
-  <tr>
-    <td width="52%" valign="top"><img src="screenshots/gnome-menu.png" alt="GNOME Quick Settings: the Sudo tile reads No password, and its menu offers reminders with a plain warning"><br><sub><b>GNOME:</b> one tile in Quick Settings. Its menu offers reminders, and says plainly what "on" means.</sub></td>
-    <td width="48%" valign="top"><img src="screenshots/gnome-password-dialog.png" alt="The system polkit password dialog asking to let sudo run without a password"><br><sub>Turning on is the system's own password dialog. Every time.</sub><br><br><img src="screenshots/reminder.png" alt="Notification: Passwordless sudo has been on for 19 min, with Turn off and Remind me in 15m buttons"><br><sub>The reminder asks; it never cuts sudo off mid-task.</sub></td>
-  </tr>
-  <tr>
-    <td valign="top"><img src="screenshots/kali-xfce-tray.png" alt="Kali Linux Xfce panel with the Ajar tray menu open"><br><sub><b>Xfce, KDE, MATE and others:</b> a tray icon. Kali shown.</sub></td>
-    <td valign="top"><img src="screenshots/kali-xfce-dialog.png" alt="Kali's polkit dialog asking to let sudo run without a password"><br><sub>Same password gate on every desktop.</sub></td>
-  </tr>
-</table>
-
-<sub>Real captures, not mock-ups: Ubuntu 24.04 (GNOME 46, HiDPI) and Kali 2026.3 (Xfce), in virtual
-machines. Also tested on Ubuntu 26.04 (GNOME 50), Debian 13 (GNOME 48) and Debian 12 (GNOME 43).
-How they were made: [screenshots/README.md](screenshots/README.md).</sub>
+<p align="center"><sub>Real captures from Ubuntu 24.04 (GNOME 46). How they were made: <a href="screenshots/README.md">screenshots/README.md</a></sub></p>
 
 ## Use
 

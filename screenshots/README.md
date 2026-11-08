@@ -5,7 +5,7 @@ are mock-ups or redrawn. This page says exactly what was done to them, so you ca
 
 | Image | Desktop | Captured with |
 |---|---|---|
-| `hero.jpg`, `gnome-*.png`, `reminder.png`, `demo.gif` | Ubuntu 24.04, GNOME 46, 3840×2160 at 2× scale, in a VM | GNOME Shell's own screenshot API |
+| `hero.jpg`, `demo.gif`, `gnome-*.png`, `reminder.png` | Ubuntu 24.04, GNOME 46, 3840×2160 at 2× scale, in a VM | GNOME Shell's own screenshot API |
 | `kali-xfce-*.png` | Kali 2026.3, Xfce, 1280×800, in a VM | the VM's framebuffer (`virsh screenshot`) |
 
 The same flows were also run and checked on Ubuntu 26.04 (GNOME 50), Debian 13 (GNOME 48) and
@@ -27,8 +27,9 @@ Debian 12 (GNOME 43 with the tray).
   a normal desktop never shows it.
 - `tools/screenshots.sh` crops, rounds the corners, adds a soft shadow, and for `hero.jpg` adds
   the dark background and the amber glow behind the real top bar.
-- `demo.gif` is real key frames of one run, joined with short crossfades (the VM's virtual GPU
-  cannot record video smoothly). Nothing in between frames was drawn.
+- `demo.gif` is real frames of one run, joined with short crossfades (the VM's virtual GPU
+  cannot record video smoothly). The terminal commands were typed as real key events; `root`
+  is sudo's real answer. Nothing between frames was drawn.
 
 ## Rebuilding
 

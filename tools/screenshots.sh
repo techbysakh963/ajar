@@ -48,26 +48,27 @@ fi
 magick "$K/kali-01-tray-menu.png"     -crop 520x220+760+0  +repage "$tmp/e.png"; card "$tmp/e.png" "$OUT/kali-xfce-tray.png" 14
 magick "$K/kali-02-polkit-dialog.png" -crop 530x250+380+322 +repage "$tmp/f.png"; card "$tmp/f.png" "$OUT/kali-xfce-dialog.png" 14
 
-# --- demo loop: real key frames, crossfaded, each cropped to where the action is --------------
-# Quick Settings (off) -> polkit dialog -> password typed -> Quick Settings (Sudo on, amber door)
-# All crops are 1000x780 px of the 2x capture, so nothing is rescaled differently between frames.
-frames=(k1-qs-off      k2-dialog         k3-dialog-typed   k6-qs-on)
-crops=( 1000x780+1560+0 1000x780+140+688  1000x780+140+688  1000x780+1560+0)
-holds=(1.6 1.0 1.0 2.6)              # seconds each frame is shown
-fade=0.45
+# --- demo loop: real frames of one run, crossfaded --------------------------------------------
+# terminal: sudo asks for a password -> Quick Settings: Sudo off -> polkit dialog -> password ->
+# Sudo on (amber door) -> terminal: the same command runs as root without asking.
+# Every frame is a screen area captured at 2x with the same aspect ratio (1.28).
+ST="$U/story"
+frames=(t1a-typed t1-asks-password q1-off d1-dialog d2-typed q2-on t2a-typed t2-root)
+holds=( 0.7       1.7              1.2    0.9       0.8      1.7   0.6       2.4)
+fade=0.35
 args=() filt="" prev="0:v" off=0
 for i in "${!frames[@]}"; do
-    magick "$U/${frames[$i]}.png" -crop "${crops[$i]}" +repage -resize 800x624! -strip "$tmp/f$i.png"
-    args+=(-loop 1 -t "$(echo "${holds[$i]} + $fade" | bc)" -i "$tmp/f$i.png")
+    magick "$ST/${frames[$i]}.png" -resize 800x624! -strip "$tmp/f$i.png"
+    args+=(-loop 1 -t "$(awk -v a="${holds[$i]}" -v b="$fade" 'BEGIN{print a+b}')" -i "$tmp/f$i.png")
 done
 for (( i=1; i<${#frames[@]}; i++ )); do
-    off=$(echo "$off + ${holds[$((i-1))]}" | bc)
+    off=$(awk -v a="$off" -v b="${holds[$((i-1))]}" 'BEGIN{print a+b}')
     filt+="[$prev][$i:v]xfade=transition=fade:duration=$fade:offset=${off}[x$i];"; prev="x$i"
 done
 ffmpeg -loglevel error -y "${args[@]}" -filter_complex "${filt}[$prev]fps=20,format=yuv420p[v]" -map "[v]" \
     -c:v libx264 -crf 22 -movflags +faststart "$OUT/demo.mp4"
 ffmpeg -loglevel error -y -i "$OUT/demo.mp4" \
-    -vf "fps=15,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a" \
+    -vf "fps=10,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" \
     -loop 0 "$OUT/demo.gif"
 
 ls -l "$OUT"/*.png "$OUT"/*.jpg "$OUT"/demo.*
