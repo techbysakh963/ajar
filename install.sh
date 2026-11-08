@@ -159,7 +159,9 @@ main() {
     # manifest: exactly what we wrote, so uninstall removes exactly that
     printf '%s\n' "${files[@]}" "$MANIFEST" | $SUDO tee "$MANIFEST.tmp" >/dev/null
     root mv -f "$MANIFEST.tmp" "$MANIFEST"
-    command -v gtk-update-icon-cache >/dev/null && root gtk-update-icon-cache -qtf "$PREFIX/share/icons/hicolor" 2>/dev/null || true
+    if command -v gtk-update-icon-cache >/dev/null; then
+        root gtk-update-icon-cache -qtf "$PREFIX/share/icons/hicolor" 2>/dev/null || true
+    fi
 
     remove_legacy
     (( ${#lock_actions[@]} )) && apply_lockdown
@@ -394,7 +396,7 @@ uninstall() {
         esac
     done
     for d in "$PREFIX/share/gnome-shell/extensions/$UUID/icons" "$PREFIX/share/gnome-shell/extensions/$UUID" "$PREFIX/share/ajar" "$LIBEXEC"; do
-        [[ -d "$d" ]] && root rmdir "$d" 2>/dev/null || true
+        if [[ -d "$d" ]]; then root rmdir "$d" 2>/dev/null || true; fi
     done
     systemctl --user stop ajar-reminder.timer 2>/dev/null || true
     head1 "Ajar removed. sudo follows /etc/sudoers only."

@@ -63,8 +63,10 @@ shot() {
 }
 
 stop() {
-    [[ -f "$T/shell.pid" ]] && kill "$(cat "$T/shell.pid")" 2>/dev/null || true
-    [[ -f "$T/bus.pid" ]] && kill "$(cat "$T/bus.pid")" 2>/dev/null || true
+    local f
+    for f in "$T/shell.pid" "$T/bus.pid"; do
+        if [[ -f "$f" ]]; then kill "$(cat "$f")" 2>/dev/null || true; fi
+    done
     rm -f "$T/shell.pid" "$T/bus.pid"
 }
 
