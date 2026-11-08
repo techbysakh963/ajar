@@ -1,0 +1,316 @@
+#!/bin/bash
+# Ajar: switch passwordless sudo on and off.
+# The one interface every front end (GNOME toggle, tray icon) calls. Runs as the normal user;
+# privileged work happens only in /usr/libexec/ajar/{enable,disable} via pkexec + polkit.
+set -uo pipefail
+
+readonly VERSION="1.0.0"
+readonly LIBEXEC="${AJAR_LIBEXEC:-/usr/libexec/ajar}"
+readonly SUDOERS_D="${AJAR_SUDOERS_D:-/etc/sudoers.d}"
+readonly UNIT="ajar-reminder"
+
+usage() {
+    cat <<'EOF'
+Usage: ajar <command> [options]
+
+  on [--remind DURATION]   Let sudo run without a password (asks for your password once).
+                           --remind 30m  notify you after 30 minutes that it is still on.
+  off                      sudo asks for a password again.
+  status [--json]          Show the real state, as sudo itself reports it.
+  remind DURATION|cancel   Set or cancel the "still on" reminder.
+  doctor                   Check this system and explain anything that blocks Ajar.
+  version
+
+DURATION: 90s, 15m, 1h, 1h30m.  Logs: journalctl -t ajar
+EOF
+}
+
+say()  { printf '%s\n' "$*"; }
+err()  { printf 'ajar: %s\n' "$*" >&2; }
+log()  { logger -t ajar -- "$*" 2>/dev/null || true; }
+me()   { id -un; }
+
+# ---------------------------------------------------------------- state ----
+
+# Reads `sudo -l` output on stdin. Prints "<count> <noauth>":
+#   count  = rules that let the caller run ALL commands as root with no password
+#   noauth = 1 when a Defaults entry disables authentication outright (!authenticate)
+# Handles both classic sudo and sudo-rs output; see tests/fixtures/sudo-l/.
+parse_sudo_l() {
+    awk '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    /^Matching Defaults entries/                { sec = "defaults"; next }
+    /^Runas and Command-specific defaults/      { sec = "other";    next }
+    /^User .* may run the following commands/   { sec = "cmds";     next }
+    sec == "defaults" {
+        n = split($0, d, ",")
+        for (i = 1; i <= n; i++) if (trim(d[i]) == "!authenticate") noauth = 1
+        next
+    }
+    sec == "cmds" && /^[ \t]+\(/ {
+        line = $0
+        runas = line; sub(/^[ \t]*\(/, "", runas); sub(/\).*$/, "", runas)
+        split(runas, ru, ":"); users = trim(ru[1])
+        root_ok = 0
+        m = split(users, ul, ",")
+        for (i = 1; i <= m; i++) { u = trim(ul[i]); if (u == "ALL" || u == "root") root_ok = 1; if (u == "!root") { root_ok = 0; break } }
+        rest = line; sub(/^[ \t]*\([^)]*\)[ \t]*/, "", rest)
+        nopw = noauth
+        k = split(rest, items, ",")
+        for (i = 1; i <= k; i++) {
+            it = trim(items[i])
+            while (match(it, /^[A-Z_]+:[ \t]*/)) {
+                tag = substr(it, 1, index(it, ":") - 1)
+                if (tag == "NOPASSWD") nopw = 1
+                else if (tag == "PASSWD") nopw = 0
+                it = trim(substr(it, RLENGTH + 1))
+            }
+            if (it == "ALL" && root_ok && nopw) count++
+        }
+    }
+    END { printf "%d %d\n", count, noauth }'
+}
+
+sudo_flavor() {
+    local v; v="$(sudo --version 2>/dev/null | head -1)"
+    case "$v" in
+        sudo-rs*) say "sudo-rs ${v#sudo-rs }" ;;
+        Sudo\ version*) say "sudo ${v#Sudo version }" ;;
+        "") say "none" ;;
+        *) say "$v" ;;
+    esac
+}
+
+rule_file() { printf '%s/90-ajar-%s' "$SUDOERS_D" "$(me)"; }
+
+# Sets globals: STATE (off|on|external|stale), OURS (0|1), EXTERNAL (0|1)
+read_state() {
+    local out count noauth effective=0
+    OURS=0; EXTERNAL=0
+    [[ -e "$(rule_file)" ]] && OURS=1
+    if out="$(LC_ALL=C sudo -n -l 2>/dev/null)"; then
+        read -r count noauth < <(parse_sudo_l <<<"$out")
+        (( count > 0 || noauth )) && effective=1
+        (( count > OURS || noauth )) && EXTERNAL=1
+    fi
+    if   (( effective && OURS ));  then STATE=on
+    elif (( effective ));          then STATE=external
+    elif (( OURS ));               then STATE=stale
+    else                                STATE=off
+    fi
+}
+
+reminder_due() {   # prints the reminder's next trigger time, or nothing
+    systemctl --user show "$UNIT.timer" -p NextElapseUSecRealtime --value 2>/dev/null \
+        | grep -v '^n/a$' | grep -v '^$' || true
+}
+
+json_str() { local s="${1//\\/\\\\}"; s="${s//\"/\\\"}"; printf '"%s"' "$s"; }
+
+cmd_status() {
+    read_state
+    local due; due="$(reminder_due)"
+    if [[ "${1:-}" == "--json" ]]; then
+        printf '{"state":%s,"ours":%s,"external":%s,"user":%s,"sudo":%s,"remind_at":%s,"version":%s}\n' \
+            "$(json_str "$STATE")" "$( ((OURS)) && echo true || echo false)" \
+            "$( ((EXTERNAL)) && echo true || echo false)" "$(json_str "$(me)")" \
+            "$(json_str "$(sudo_flavor)")" "$( [[ -n "$due" ]] && json_str "$due" || echo null)" \
+            "$(json_str "$VERSION")"
+        return 0
+    fi
+    case "$STATE" in
+        on)       say "ON: sudo runs without a password for $(me)." ;;
+        off)      say "OFF: sudo asks for a password." ;;
+        external) say "ON, but not because of Ajar: another sudoers rule gives $(me) passwordless sudo."
+                  say "  Ajar cannot turn that off. Run 'ajar doctor' to find it." ;;
+        stale)    say "OFF, although Ajar's rule exists: a later sudoers rule overrides it."
+                  say "  Run 'ajar doctor' for details." ;;
+    esac
+    (( EXTERNAL )) && [[ "$STATE" == on ]] && say "  Note: another rule also gives passwordless sudo; 'ajar off' will not remove it."
+    [[ -n "$due" ]] && say "  Reminder: $due"
+    return 0
+}
+
+# ------------------------------------------------------------- notify -----
+
+notify() {   # notify <urgency> <title> <body>
+    command -v notify-send >/dev/null || return 0
+    notify-send -a Ajar -u "$1" -i ajar-open-symbolic "$2" "$3" 2>/dev/null || true
+}
+
+valid_duration() { [[ "$1" =~ ^([0-9]+[smh])+$ ]]; }
+
+cmd_remind() {
+    local arg="${1:-}"
+    systemctl --user stop "$UNIT.timer" "$UNIT.service" 2>/dev/null
+    systemctl --user reset-failed "$UNIT.timer" "$UNIT.service" 2>/dev/null
+    [[ "$arg" == cancel ]] && { say "Reminder cancelled."; return 0; }
+    valid_duration "$arg" || { err "invalid duration '$arg' (examples: 90s, 15m, 1h30m)"; return 2; }
+    systemd-run --user --quiet --unit="$UNIT" --on-active="$arg" --timer-property=AccuracySec=5s \
+        "$(readlink -f "$0")" __fire-reminder "$arg" \
+        || { err "could not schedule the reminder (is a systemd user session running?)"; return 1; }
+    log "reminder set for $arg"
+    say "Reminder set: you will be notified in $arg if passwordless sudo is still on."
+}
+
+# Runs from the user's systemd timer. Never changes privileges by itself: it only asks.
+cmd_fire_reminder() {
+    local again="${1:-30m}" choice
+    read_state
+    [[ "$STATE" == on ]] || return 0
+    log "reminder: passwordless sudo is still ON"
+    if ! command -v notify-send >/dev/null; then return 0; fi
+    choice="$(notify-send -a Ajar -u critical -i ajar-open-symbolic \
+        -A off="Turn off" -A again="Remind me in $again" \
+        "Passwordless sudo is still on" \
+        "Any program running as $(me) can become root without asking." 2>/dev/null)"
+    case "$choice" in
+        off)   cmd_off ;;
+        again) cmd_remind "$again" >/dev/null ;;
+    esac
+}
+
+# ------------------------------------------------------------- on / off ---
+
+pkexec_run() {   # pkexec_run <helper>; returns pkexec's status
+    if ! command -v pkexec >/dev/null; then
+        err "pkexec is not installed. On Debian: sudo apt install pkexec"
+        return 3
+    fi
+    pkexec "$LIBEXEC/$1"
+}
+
+cmd_on() {
+    local remind=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --remind) remind="${2:-}"; shift 2 || { err "--remind needs a duration"; return 2; } ;;
+            --remind=*) remind="${1#*=}"; shift ;;
+            *) err "unknown option '$1'"; return 2 ;;
+        esac
+    done
+    [[ -z "$remind" ]] || valid_duration "$remind" || { err "invalid duration '$remind'"; return 2; }
+
+    read_state
+    if [[ "$STATE" != on ]]; then
+        pkexec_run enable; local rc=$?
+        case $rc in
+            0) ;;
+            126) err "cancelled: authentication was dismissed."; return 126 ;;
+            127) err "not authorized (or no polkit authentication agent is running). Try 'ajar doctor'."; return 127 ;;
+            *) err "turning on failed (pkexec exit $rc)."; return "$rc" ;;
+        esac
+        read_state
+    fi
+    case "$STATE" in
+        on)
+            say "ON: sudo runs without a password for $(me)."
+            notify normal "Passwordless sudo is on" "Any program running as $(me) can now become root without asking."
+            ;;
+        stale)
+            err "Ajar's rule was written but sudo still asks for a password: a later sudoers rule overrides it. Run 'ajar doctor'."
+            return 4 ;;
+        *)
+            err "unexpected state after enabling: $STATE"; return 4 ;;
+    esac
+    [[ -n "$remind" ]] && cmd_remind "$remind"
+    return 0
+}
+
+cmd_off() {
+    read_state
+    systemctl --user stop "$UNIT.timer" 2>/dev/null
+    if (( OURS )); then
+        pkexec_run disable; local rc=$?
+        (( rc == 0 )) || { err "turning off failed (pkexec exit $rc). Remote or inactive sessions must authenticate."; return "$rc"; }
+        sudo -k 2>/dev/null
+        read_state
+    fi
+    case "$STATE" in
+        off|stale) say "OFF: sudo asks for a password." ;;
+        external)  say "Ajar's rule is off, but another sudoers rule still gives $(me) passwordless sudo."
+                   say "  Run 'ajar doctor' to find it."; return 5 ;;
+        on)        err "still on after disabling; this should not happen. See: journalctl -t ajar"; return 4 ;;
+    esac
+}
+
+# --------------------------------------------------------------- doctor ---
+
+cmd_doctor() {
+    local ok=0 warn=0
+    pass() { printf '  \e[32mok\e[0m    %s\n' "$*"; ok=$((ok+1)); }
+    note() { printf '  \e[33mnote\e[0m  %s\n' "$*"; warn=$((warn+1)); }
+    bad()  { printf '  \e[31mfix\e[0m   %s\n' "$*"; warn=$((warn+1)); }
+    say "Ajar $VERSION doctor"
+
+    local flavor; flavor="$(sudo_flavor)"
+    if [[ "$flavor" == none ]]; then
+        bad "sudo is not installed. As root: apt install sudo && usermod -aG sudo $(me), then log out and in."
+    else pass "sudo: $flavor"; fi
+
+    if id -nG | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'; then
+        pass "$(me) is in an admin group ($(id -nG | tr ' ' '\n' | grep -xE 'sudo|admin|wheel' | paste -sd,))"
+    else
+        bad "$(me) is not in the sudo group. Polkit will ask for the ROOT password, and the rule Ajar writes is your only sudo access."
+    fi
+    id -nG | tr ' ' '\n' | grep -qx empower && note "$(me) is in systemd's 'empower' group: polkit allows every action without a password, including turning Ajar on."
+
+    if command -v pkexec >/dev/null; then pass "pkexec: $(command -v pkexec)"
+    else bad "pkexec is missing (Debian 12+: sudo apt install pkexec)"; fi
+    if [[ -x "$LIBEXEC/enable" && -x "$LIBEXEC/disable" ]]; then pass "helpers: $LIBEXEC"
+    else bad "helpers missing in $LIBEXEC; reinstall Ajar"; fi
+    if command -v pkaction >/dev/null && pkaction --action-id io.github.techbysakh963.ajar.enable >/dev/null 2>&1; then
+        pass "polkit policy installed"
+    else bad "polkit policy io.github.techbysakh963.ajar not found; reinstall Ajar"; fi
+
+    if command -v pkcheck >/dev/null; then
+        pkcheck --action-id io.github.techbysakh963.ajar.enable --process $$ >/dev/null 2>&1; local pc=$?
+        case $pc in
+            2) pass "turning on requires authentication (polkit verdict: challenge)" ;;
+            0) note "polkit allows turning on WITHOUT a password for you (a rules.d file grants it)" ;;
+            *) note "polkit verdict for turning on: not authorized (exit $pc)" ;;
+        esac
+    fi
+
+    local agent
+    agent="$(pgrep -l '^(gnome-shell|polkit-gnome-au|polkit-kde-auth|polkit-mate-aut|lxpolkit|lxqt-policykit|xfce-polkit|mate-polkit|polkit-agent-he|cinnamon)$' 2>/dev/null | head -1 | cut -d' ' -f2)"
+    if [[ -n "$agent" ]]; then pass "polkit authentication agent running ($agent)"
+    elif [[ -t 0 ]]; then note "no graphical polkit agent found; 'ajar on' still works in a terminal, but the tray icon cannot ask for your password. Install policykit-1-gnome or mate-polkit."
+    else bad "no polkit authentication agent found"; fi
+
+    read_state
+    case "$STATE" in
+        on|off) pass "state: $STATE" ;;
+        external)
+            bad "passwordless sudo comes from a rule Ajar does not manage."
+            id -nG | tr ' ' '\n' | grep -qx kali-trusted && \
+                say "        Cause: $(me) is in group 'kali-trusted' (Kali's kali-grant-root). Fix: sudo gpasswd -d $(me) kali-trusted, then log out and in."
+            say "        Find others with: sudo grep -rn NOPASSWD /etc/sudoers /etc/sudoers.d" ;;
+        stale) bad "Ajar's rule exists but a later sudoers rule overrides it; check files sorting after 90-ajar-* in $SUDOERS_D" ;;
+    esac
+    [[ -e "$SUDOERS_D/90-sudo-gate" ]] && note "the old Sudo Gate prototype rule is present ($SUDOERS_D/90-sudo-gate)."
+
+    local de="${XDG_CURRENT_DESKTOP:-unknown}"
+    if [[ "$de" == *GNOME* ]] && command -v gnome-shell >/dev/null; then
+        local gv; gv="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+        if (( gv >= 45 && gv <= 50 )); then pass "desktop: GNOME $gv (Quick Settings toggle supported)"
+        else note "desktop: GNOME $gv (use the tray icon; the toggle needs GNOME 45-50)"; fi
+    else pass "desktop: $de (tray icon)"; fi
+    say ""; say "$ok ok, $warn to look at."
+    return $(( warn > 0 ))
+}
+
+# ----------------------------------------------------------------- main ---
+
+case "${1:-}" in
+    on)     shift; cmd_on "$@" ;;
+    off)    shift; cmd_off ;;
+    status) shift; cmd_status "$@" ;;
+    remind) shift; cmd_remind "$@" ;;
+    doctor) shift; cmd_doctor ;;
+    version|--version) say "ajar $VERSION" ;;
+    help|-h|--help|"") usage ;;
+    __parse) parse_sudo_l ;;                       # for tests
+    __fire-reminder) shift; cmd_fire_reminder "$@" ;;
+    *) err "unknown command '$1'"; usage >&2; exit 2 ;;
+esac
