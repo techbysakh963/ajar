@@ -1,12 +1,16 @@
-#!/bin/bash
+#!/bin/bash -p
 # Ajar: switch passwordless sudo on and off.
 # The one interface every front end (GNOME toggle, tray icon) calls. Runs as the normal user;
 # privileged work happens only in /usr/libexec/ajar/{enable,disable} via pkexec + polkit.
 set -uo pipefail
+# Fixed paths: nothing in the caller's environment may decide what pkexec runs.
+# (`bash -p` above also ignores BASH_ENV and functions exported into the environment.)
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 
 readonly VERSION="1.0.0"
-readonly LIBEXEC="${AJAR_LIBEXEC:-/usr/libexec/ajar}"
-readonly SUDOERS_D="${AJAR_SUDOERS_D:-/etc/sudoers.d}"
+readonly LIBEXEC=/usr/libexec/ajar
+readonly SUDOERS_D=/etc/sudoers.d
+readonly PKEXEC=/usr/bin/pkexec
 readonly UNIT="ajar-reminder"
 
 usage() {
@@ -19,6 +23,7 @@ Usage: ajar <command> [options]
   status [--json]          Show the real state, as sudo itself reports it.
   remind DURATION|cancel   Set or cancel the "still on" reminder.
   doctor                   Check this system and explain anything that blocks Ajar.
+  uninstall                Remove Ajar (turns passwordless sudo off first).
   version
 
 DURATION: 90s, 15m, 1h, 1h30m.  Logs: journalctl -t ajar
@@ -35,6 +40,7 @@ me()   { id -un; }
 # Reads `sudo -l` output on stdin. Prints "<count> <noauth>":
 #   count  = rules that let the caller run ALL commands as root with no password
 #   noauth = 1 when a Defaults entry disables authentication outright (!authenticate)
+#   narrow = passwordless rules for specific commands as root (a shell or editor there is root too)
 # Handles both classic sudo and sudo-rs output; see tests/fixtures/sudo-l/.
 parse_sudo_l() {
     awk '
@@ -66,9 +72,10 @@ parse_sudo_l() {
                 it = trim(substr(it, RLENGTH + 1))
             }
             if (it == "ALL" && root_ok && nopw) count++
+            else if (it != "" && root_ok && nopw) narrow++
         }
     }
-    END { printf "%d %d\n", count, noauth }'
+    END { printf "%d %d %d\n", count, noauth, narrow }'
 }
 
 sudo_flavor() {
@@ -83,18 +90,23 @@ sudo_flavor() {
 
 rule_file() { printf '%s/90-ajar-%s' "$SUDOERS_D" "$(me)"; }
 
-# Sets globals: STATE (off|on|external|stale), OURS (0|1), EXTERNAL (0|1)
+# Sets globals: STATE (off|on|external|stale|unknown), OURS, EXTERNAL, NARROW
+#   unknown: Ajar's rule exists but `sudo -n -l` would not answer (e.g. Defaults listpw=always),
+#            so the real state cannot be read. Front ends show it as OPEN, never as off.
 read_state() {
-    local out count noauth effective=0
-    OURS=0; EXTERNAL=0
+    local out count=0 noauth=0 narrow=0 effective=0 listed=0
+    OURS=0; EXTERNAL=0; NARROW=0
     [[ -e "$(rule_file)" ]] && OURS=1
     if out="$(LC_ALL=C sudo -n -l 2>/dev/null)"; then
-        read -r count noauth < <(parse_sudo_l <<<"$out")
+        listed=1
+        read -r count noauth narrow < <(parse_sudo_l <<<"$out")
         (( count > 0 || noauth )) && effective=1
         (( count > OURS || noauth )) && EXTERNAL=1
+        NARROW=$narrow
     fi
     if   (( effective && OURS ));  then STATE=on
     elif (( effective ));          then STATE=external
+    elif (( OURS && !listed ));    then STATE=unknown
     elif (( OURS ));               then STATE=stale
     else                                STATE=off
     fi
@@ -115,9 +127,9 @@ cmd_status() {
     read_state
     local due; due="$(reminder_due)"
     if [[ "${1:-}" == "--json" ]]; then
-        printf '{"state":%s,"ours":%s,"external":%s,"user":%s,"sudo":%s,"remind_at":%s,"version":%s}\n' \
+        printf '{"state":%s,"ours":%s,"external":%s,"narrow":%d,"user":%s,"sudo":%s,"remind_at":%s,"version":%s}\n' \
             "$(json_str "$STATE")" "$( ((OURS)) && echo true || echo false)" \
-            "$( ((EXTERNAL)) && echo true || echo false)" "$(json_str "$(me)")" \
+            "$( ((EXTERNAL)) && echo true || echo false)" "$NARROW" "$(json_str "$(me)")" \
             "$(json_str "$(sudo_flavor)")" "$( [[ -n "$due" ]] && json_str "$due" || echo null)" \
             "$(json_str "$VERSION")"
         return 0
@@ -127,10 +139,14 @@ cmd_status() {
         off)      say "OFF: sudo asks for a password." ;;
         external) say "ON, but not because of Ajar: another sudoers rule gives $(me) passwordless sudo."
                   say "  Ajar cannot turn that off. Run 'ajar doctor' to find it." ;;
+        unknown)  say "PROBABLY ON: Ajar's rule exists, but sudo will not list your rules without a password,"
+                  say "  so the real state cannot be checked. Run 'ajar off' to be sure."
+                  ;;
         stale)    say "OFF, although Ajar's rule exists: a later sudoers rule overrides it."
                   say "  Run 'ajar doctor' for details." ;;
     esac
     (( EXTERNAL )) && [[ "$STATE" == on ]] && say "  Note: another rule also gives passwordless sudo; 'ajar off' will not remove it."
+    (( NARROW > 0 )) && say "  Note: $NARROW passwordless rule(s) for specific commands exist; if one is a shell or editor, that is root too. See 'ajar doctor'."
     [[ -n "$due" ]] && say "  Reminder: $due"
     return 0
 }
@@ -241,11 +257,11 @@ cmd_fire_reminder() {
 # ------------------------------------------------------------- on / off ---
 
 pkexec_run() {   # pkexec_run <helper>; returns pkexec's status
-    if ! command -v pkexec >/dev/null; then
+    if [[ ! -x "$PKEXEC" ]]; then
         err "pkexec is not installed. On Debian: sudo apt install pkexec"
         return 3
     fi
-    pkexec "$LIBEXEC/$1"
+    "$PKEXEC" "$LIBEXEC/$1"
 }
 
 cmd_on() {
@@ -299,7 +315,7 @@ cmd_off() {
         read_state
     fi
     case "$STATE" in
-        off|stale) say "OFF: sudo asks for a password."
+        off|stale|unknown) say "OFF: sudo asks for a password."
                    notify low io.github.techbysakh963.Ajar-closed "Passwordless sudo is off" "sudo asks for your password again." ;;
         external)  say "Ajar's rule is off, but another sudoers rule still gives $(me) passwordless sudo."
                    say "  Run 'ajar doctor' to find it."; return 5 ;;
@@ -360,6 +376,7 @@ cmd_doctor() {
             id -nG | tr ' ' '\n' | grep -qx kali-trusted && \
                 say "        Cause: $(me) is in group 'kali-trusted' (Kali's kali-grant-root). Fix: sudo gpasswd -d $(me) kali-trusted, then log out and in."
             say "        Find others with: sudo grep -rn NOPASSWD /etc/sudoers /etc/sudoers.d" ;;
+        unknown) bad "Ajar's rule exists but sudo won't list rules without a password (listpw); state can't be verified" ;;
         stale) bad "Ajar's rule exists but a later sudoers rule overrides it; check files sorting after 90-ajar-* in $SUDOERS_D" ;;
     esac
     [[ -e "$SUDOERS_D/90-sudo-gate" ]] && note "the old Sudo Gate prototype rule is present ($SUDOERS_D/90-sudo-gate)."
@@ -382,6 +399,12 @@ case "${1:-}" in
     status) shift; cmd_status "$@" ;;
     remind) shift; cmd_remind "$@" ;;
     doctor) shift; cmd_doctor ;;
+    uninstall)
+        if dpkg-query -W -f='${Status}' ajar 2>/dev/null | grep -q 'ok installed'; then
+            say "Ajar was installed as a package. Remove it with: sudo apt remove ajar"
+        elif [[ -f /usr/local/share/ajar/install.sh ]]; then
+            exec sudo bash /usr/local/share/ajar/install.sh --uninstall
+        else err "no installation found"; exit 1; fi ;;
     version|--version) say "ajar $VERSION" ;;
     help|-h|--help|"") usage ;;
     __parse) parse_sudo_l ;;                       # for tests

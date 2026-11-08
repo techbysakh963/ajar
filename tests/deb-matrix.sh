@@ -23,7 +23,8 @@ t "dpkg reports installed"          dpkg-query -W -f='${Status}' ajar
 t "ajar status works"               su - alice -c 'ajar status --json'
 t "enable helper (as pkexec would)" env PKEXEC_UID="$(id -u alice)" /usr/libexec/ajar/enable
 t "alice has passwordless sudo"     su - alice -c 'sudo -n true'
-t "apt remove ajar"                 apt-get remove -y -qq ajar
+# as Synaptic / `pkexec apt` would: PKEXEC_UID leaks into the maintainer scripts
+t "apt remove ajar (PKEXEC_UID leaked)" env PKEXEC_UID="$(id -u alice)" apt-get remove -y -qq ajar
 t "removal turned it off"           bash -c '! test -e /etc/sudoers.d/90-ajar-alice'
 t "apt purge ajar"                  apt-get purge -y -qq ajar
 left="$(find / -xdev \( -name '*ajar*' -o -name 'io.github.techbysakh963*' \) -not -path '/proc/*' -not -path '/root/ajar.deb' -not -path '/tmp/ajar.deb' -not -path '/var/lib/dpkg/*' -not -path '/var/cache/*' 2>/dev/null)"

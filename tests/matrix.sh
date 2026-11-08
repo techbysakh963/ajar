@@ -28,6 +28,12 @@ apt-get update -qq >/dev/null && apt-get install -y -qq sudo procps >/dev/null 2
 . /etc/os-release; echo "distro: $PRETTY_NAME, $(sudo --version | head -1)"
 groupadd -f installers
 useradd -m -s /bin/bash -G sudo,installers alice
+echo 'alice:correct-horse' | chpasswd          # lockdown requires a usable password
+useradd -m -s /bin/bash bob                   # no password, no admin group: lockdown must not touch him
+echo 'bob ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/91-bob; chmod 440 /etc/sudoers.d/91-bob
+useradd -m -s /bin/bash -G sudo al.ice        # name with a dot: must not match "alXice" style regexes
+echo 'alXice ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/92-alxice; chmod 440 /etc/sudoers.d/92-alxice
+useradd -m -s /bin/bash carol                 # no sudo rights at all
 # install-time sudo via a GROUP rule: lockdown reports group rules but never edits them
 echo '%installers ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/00-installers; chmod 440 /etc/sudoers.d/00-installers
 # a per-user grant for lockdown to remove (cloud-init writes exactly this shape)
@@ -51,9 +57,22 @@ t "lockdown: cloud-init line commented" grep -q '^# disabled by ajar --lockdown:
 t "lockdown: backup kept"            bash -c 'ls /etc/sudoers.d/ | grep -q "90-cloud-init-users.ajar-backup"'
 f "lockdown: group rule untouched"   grep -q '^#' /etc/sudoers.d/00-installers
 t "sudoers still valid"              visudo -c
+t "lockdown left no temp copies"     bash -c '! ls -A /etc/sudoers.d /etc | grep -q "^\.ajar-lockdown"'
+f "lockdown: other users untouched"  grep -q '^#' /etc/sudoers.d/91-bob
 if grep -qi kali /etc/os-release; then
     f "lockdown: alice left kali-trusted" bash -c 'id -nG alice | tr " " "\n" | grep -qx kali-trusted'
 fi
+
+echo "== lockdown guards"
+cp -r /src /home/bob/ajar && chown -R bob: /home/bob/ajar
+echo 'bob ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/91-bob; chmod 440 /etc/sudoers.d/91-bob
+su - bob -c 'cd ~/ajar && ./install.sh --dry-run --lockdown' > /tmp/bob.log 2>&1
+t "no usable password: lockdown is report-only" grep -q 'Report only' /tmp/bob.log
+f "  ...and plans no change to 91-bob"          grep -q 'will comment out' /tmp/bob.log
+echo 'al.ice:pw' | chpasswd; usermod -aG installers al.ice
+cp -r /src /home/al.ice/ajar && chown -R al.ice: /home/al.ice/ajar
+su - al.ice -c 'cd ~/ajar && ./install.sh --dry-run --lockdown' > /tmp/alice-dot.log 2>&1
+f "dotted user name does not match alXice"      grep -A1 '92-alxice' /tmp/alice-dot.log | grep -q 'will comment out'
 
 echo "== state machine on this distro's sudo"
 # alice still has the group grant, so turn it into a password-only setup for the state checks
@@ -72,6 +91,8 @@ t "status: off again"                bash -c "su - alice -c 'ajar status --json'
 f "alice needs a password again"     su - alice -c 'sudo -n true'
 f "enable refuses without pkexec"    /usr/libexec/ajar/enable
 f "enable refuses root"              env PKEXEC_UID=0 /usr/libexec/ajar/enable
+f "enable refuses a user without sudo rights (carol)" env PKEXEC_UID="$(id -u carol)" /usr/libexec/ajar/enable
+f "  ...and wrote nothing for carol"  test -e /etc/sudoers.d/90-ajar-carol
 t "doctor runs"                      bash -c "su - alice -c 'ajar doctor' | grep -q 'sudo:'"
 
 echo "== uninstall"

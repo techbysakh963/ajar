@@ -22,8 +22,12 @@ for f in "$here"/fixtures/sudo-l/*--*.txt; do
     if [[ "$code" != 0 ]]; then
         got=0     # sudo -n -l failed: a password is required, so passwordless is off
     else
-        read -r count noauth < <(grep -v '^# ' "$f" | "$ajar" __parse)
+        read -r count noauth narrow < <(grep -v "^# " "$f" | "$ajar" __parse)
         got=$(( count > 0 || noauth ))
+        # narrow rules (a specific command as root without a password) must be counted
+        if [[ "$scen" == narrow-nopasswd || "$scen" == mixed-passwd-all ]] && [[ "$narrow" != 1 ]]; then
+            fail=$((fail+1)); echo "FAIL  $name: narrow=$narrow, want 1"; continue
+        fi
     fi
     if [[ "$got" == "${want[$scen]}" ]]; then pass=$((pass+1))
     else fail=$((fail+1)); echo "FAIL  $name: got $got, want ${want[$scen]}"; fi

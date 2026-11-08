@@ -25,6 +25,14 @@ user="$(getent passwd "$uid" | cut -d: -f1)"
 # Strict on purpose: the name becomes part of a sudoers line and a file name.
 [[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "unsupported user name for uid $uid"
 
+# Ajar only removes a password prompt. It must never give sudo to a user who has none,
+# even if an administrator typed their password into the dialog on that user's behalf.
+if ! id -nG "$user" | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'; then
+    sudo -l -U "$user" 2>/dev/null \
+        | grep -qE '^[[:space:]]+\((ALL|root)[^)]*\)[[:space:]]+([A-Z_]+:[[:space:]]*)*ALL[[:space:]]*$' \
+        || die "$user has no sudo rights to begin with; Ajar only removes the password prompt"
+fi
+
 [[ -d "$DIR" && ! -L "$DIR" ]] || die "$DIR is missing; is sudo installed?"
 [[ "$(stat -c '%u %a' "$DIR")" =~ ^0\ 7[0-5][0-5]$ ]] || die "$DIR has unsafe ownership or mode"
 
@@ -37,4 +45,4 @@ chmod 0440 "$tmp"
 visudo -cf "$tmp" >/dev/null || die "generated rule failed visudo validation"
 mv -f "$tmp" "$target"
 trap - EXIT
-logger -t ajar -p auth.notice "passwordless sudo ENABLED for $user (uid $uid)"
+logger -t ajar -p auth.notice "passwordless sudo ENABLED for $user (uid $uid)" || true

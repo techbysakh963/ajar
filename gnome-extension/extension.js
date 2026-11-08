@@ -53,6 +53,7 @@ class AjarToggle extends QuickMenuToggle {
             off: 'Turning on asks for your password. Turning off never does.',
             external: 'A sudoers rule outside Ajar gives you passwordless sudo, so Ajar cannot close it. Run "ajar doctor" in a terminal.',
             stale: 'Ajar\'s rule is overridden by a later sudoers rule. Run "ajar doctor" in a terminal.',
+            unknown: 'sudo will not list your rules without a password, so the state cannot be checked. Turning off still works.',
             unavailable: 'The ajar command was not found. Reinstall Ajar.',
         }[st.state];
     }
@@ -60,11 +61,8 @@ class AjarToggle extends QuickMenuToggle {
     _onClicked() {
         if (!this._st)
             return;
-        if (this._st.state === 'external') {
-            Main.notify('Ajar', 'Passwordless sudo comes from a rule Ajar does not manage. Run "ajar doctor" to find it.');
-            this.show(this._st);   // keep the real state, the click changed nothing
-            return;
-        }
+        // Open in any form (including "another rule" and "unknown"): always try to turn off.
+        // The helper is idempotent, and the state shown afterwards is re-read from sudo.
         if (this._st.open)
             this._off();
         else
@@ -96,7 +94,9 @@ class AjarToggle extends QuickMenuToggle {
     _off() {
         return this._act(async () => {
             const r = await Ajar.turnOff();
-            if (!r.ok)
+            if (r.external)
+                Main.notify('Ajar', 'Passwordless sudo comes from a rule Ajar does not manage. Run "ajar doctor" to find it.');
+            else if (!r.ok)
                 Main.notifyError('Ajar', r.error || 'Could not turn off passwordless sudo.');
         });
     }

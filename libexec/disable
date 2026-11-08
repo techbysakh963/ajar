@@ -20,7 +20,7 @@ if [[ $# -eq 1 && "$1" == "--all" ]]; then
     for f in "$DIR"/90-ajar-*; do
         [[ "${f##*/}" =~ ^90-ajar-[a-z_][a-z0-9_-]{0,31}$ ]] || continue
         rm -f -- "$f"
-        logger -t ajar -p auth.notice "passwordless sudo DISABLED (${f##*/} removed by uninstall)"
+        logger -t ajar -p auth.notice "passwordless sudo DISABLED (${f##*/} removed by uninstall)" || true
     done
     exit 0
 fi
@@ -32,4 +32,4 @@ user="$(getent passwd "$uid" | cut -d: -f1)"
 [[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "unsupported user name for uid $uid"
 
 rm -f -- "$DIR/90-ajar-$user"
-logger -t ajar -p auth.notice "passwordless sudo DISABLED for $user (uid $uid)"
+logger -t ajar -p auth.notice "passwordless sudo DISABLED for $user (uid $uid)" || true

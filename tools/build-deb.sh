@@ -55,7 +55,12 @@ cat > "$stage/DEBIAN/prerm" <<'SH'
 # On removal (not upgrade), turn passwordless sudo off for every user Ajar enabled it for.
 set -e
 case "$1" in
-    remove|deconfigure) [ -x /usr/libexec/ajar/disable ] && /usr/libexec/ajar/disable --all || true ;;
+    remove|deconfigure)
+        # env -u: Synaptic and `pkexec apt` leak PKEXEC_UID into maintainer scripts, and
+        # disable refuses --all when it looks like it was started through pkexec.
+        if [ -x /usr/libexec/ajar/disable ] && ! env -u PKEXEC_UID /usr/libexec/ajar/disable --all; then
+            echo "ajar: WARNING: could not remove /etc/sudoers.d/90-ajar-*; remove them by hand" >&2
+        fi ;;
 esac
 exit 0
 SH

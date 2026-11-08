@@ -61,7 +61,10 @@ main() {
     # ---- source: a checkout next to this script, or a verified release download ----------
     local src="" tmp=""
     local self="${BASH_SOURCE[0]:-}"
-    if [[ -n "$self" && -f "$(dirname "$self")/bin/ajar" ]]; then
+    # Only an unbuilt (development) copy may install from a local checkout. A release copy
+    # always downloads and verifies, even when run from a directory that contains bin/ajar.
+    # (The placeholder is split so the release build's substitution cannot rewrite this test.)
+    if [[ "$AJAR_VERSION" == "@VER""SION@" && -n "$self" && -f "$(dirname "$self")/bin/ajar" ]]; then
         src="$(cd "$(dirname "$self")" && pwd)"
         AJAR_VERSION="$(sed -n 's/^readonly VERSION="\(.*\)"/\1/p' "$src/bin/ajar")"
     else
@@ -118,7 +121,7 @@ main() {
         say "  remove the Sudo Gate prototype:"; printf '    - %s\n' "${legacy[@]}"
     fi
 
-    local lock_actions=()
+    local lock_actions=(); declare -A LOCK_TEXT=()
     if (( lockdown )) && [[ -n "$user" ]]; then
         find_other_grants
     fi
@@ -260,48 +263,70 @@ report_environment() {
 # and Kali's kali-trusted group are changed; anything else is reported, never edited.
 find_other_grants() {
     head1 "Lockdown: other passwordless-sudo grants for $user"
-    local found=0 line file
+    local found=0 line file can_lock=1 why=""
+    # Never take away the only way to root: removing a grant is only offered when the user
+    # can still use sudo with a password afterwards.
+    if ! id -nG "$user" | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel'; then
+        can_lock=0; why="$user is not in an admin group (sudo/admin/wheel)"
+    elif [[ "$($SUDO passwd -S "$user" 2>/dev/null | awk '{print $2}')" != P ]]; then
+        can_lock=0; why="$user has no usable password (locked or empty), so sudo with a password would be impossible"
+    fi
+    (( can_lock )) || say "  Report only: $why. Removing a grant could lock you out of root."
     if getent group kali-trusted >/dev/null && id -nG "$user" | tr ' ' '\n' | grep -qx kali-trusted; then
         say "  - $user is in group kali-trusted (Kali: %kali-trusted ALL=(ALL:ALL) NOPASSWD: ALL)"
-        say "      will run: gpasswd -d $user kali-trusted   (takes effect at next login)"
-        lock_actions+=("group:kali-trusted"); found=1
+        if (( can_lock )); then
+            say "      will run: gpasswd -d $user kali-trusted   (takes effect at next login)"
+            lock_actions+=("group:kali-trusted")
+        fi
+        found=1
     fi
+    local ure; ure="$(printf '%s' "$user" | sed 's/[][\.*^$+?(){}|/]/\\&/g')"
     while IFS= read -r line; do
         file="${line%%:*}"; [[ "$file" == */90-ajar-* || "$file" == */90-sudo-gate ]] && continue
         local rest lineno text
         rest="${line#*:}"; lineno="${rest%%:*}"; text="${rest#*:}"
         [[ "$text" =~ ^[[:space:]]*%kali-trusted[[:space:]] ]] && continue   # handled by the group step
-        if [[ "$text" =~ ^[[:space:]]*${user}[[:space:]]+ALL[[:space:]]*=[[:space:]]*\(ALL(:ALL)?\)[[:space:]]+NOPASSWD:[[:space:]]*ALL[[:space:]]*$ ]]; then
-            say "  - $file:$lineno: $text"
-            say "      will comment out this line (backup kept, whole config re-validated with visudo)"
-            lock_actions+=("line:$file:$lineno"); found=1
+        say "  - $file:$lineno: $text"
+        if (( can_lock )) && [[ "$text" =~ ^[[:space:]]*${ure}[[:space:]]+ALL[[:space:]]*=[[:space:]]*\(ALL(:ALL)?\)[[:space:]]+NOPASSWD:[[:space:]]*ALL[[:space:]]*$ ]]; then
+            say "      will comment out this line (backup kept; edited copy checked with visudo first)"
+            lock_actions+=("line:$file:$lineno"); LOCK_TEXT["$file:$lineno"]="$text"
         else
-            say "  - $file:$lineno: $text"
-            say "      reported only: not an exact per-user rule, edit it yourself if you want it gone"
-            found=1
+            say "      reported only: edit it yourself if you want it gone"
         fi
-    done < <($SUDO grep -nHE "^[[:space:]]*[^#].*NOPASSWD|!authenticate" /etc/sudoers /etc/sudoers.d/* 2>/dev/null \
-             | grep -E "(^|[[:space:]:])(${user}|%[a-z_-]+|ALL)[[:space:]]" || true)
+        found=1
+    # the glob must expand as root: /etc/sudoers.d may not be readable by the user
+    done < <($SUDO sh -c 'grep -nHE "^[[:space:]]*[^#].*NOPASSWD|!authenticate" /etc/sudoers /etc/sudoers.d/* 2>/dev/null' \
+             | grep -E "(^|[[:space:]:])(${ure}|%[a-z_-]+|ALL)[[:space:]]" || true)
     (( found )) || say "  none found"
 }
 
 apply_lockdown() {
     head1 "Lockdown"
-    local a file lineno
+    local a file lineno cur tmpf bak
     for a in "${lock_actions[@]}"; do
         case "$a" in
             group:kali-trusted) root gpasswd -d "$user" kali-trusted ;;
             line:*)
                 IFS=: read -r _ file lineno <<<"$a"
-                local bak; bak="$file.ajar-backup-$(date +%Y%m%d%H%M%S)"
+                # the file may have changed since the plan was shown: re-check the exact line
+                cur="$($SUDO sed -n "${lineno}p" "$file")"
+                if [[ "$cur" != "${LOCK_TEXT[$file:$lineno]}" ]]; then
+                    warn "$file changed since the scan; left it alone"; continue
+                fi
+                # edit a dotted copy (sudo ignores it), validate it, then move it into place
+                tmpf="$($SUDO mktemp "$(dirname "$file")/.ajar-lockdown.XXXXXX")"
+                # shellcheck disable=SC2016  # $1/$2 belong to the inner sh, passed as arguments
+                root sh -c 'cat -- "$1" > "$2"' _ "$file" "$tmpf"
+                root sed -i "${lineno}s/^/# disabled by ajar --lockdown: /" "$tmpf"
+                if ! $SUDO visudo -cf "$tmpf" >/dev/null 2>&1; then
+                    root rm -f "$tmpf"; warn "the edited copy of $file failed visudo; left it alone"; continue
+                fi
+                bak="$file.ajar-backup-$(date +%Y%m%d%H%M%S)"   # has a dot: sudo ignores it
                 root cp -a "$file" "$bak"
-                root sed -i "${lineno}s/^/# disabled by ajar --lockdown: /" "$file"
-                if ! $SUDO visudo -c >/dev/null 2>&1; then
-                    root cp -a "$bak" "$file"
-                    warn "visudo rejected the result; restored $file unchanged"
-                else
-                    say "  commented out $file:$lineno (backup: $bak)"
-                fi ;;
+                root chown --reference="$file" "$tmpf"
+                root chmod --reference="$file" "$tmpf"
+                root mv -f "$tmpf" "$file"
+                say "  commented out $file:$lineno (backup: $bak)" ;;
         esac
     done
 }
@@ -333,14 +358,36 @@ uninstall() {
     sed 's/^/  /' "$MANIFEST"
     if (( dry )); then head1 "Dry run: nothing was changed."; return 0; fi
     confirm || { say "Cancelled."; return 1; }
-    [[ -x "$LIBEXEC/disable" ]] && root "$LIBEXEC/disable" --all
+    [[ -x "$LIBEXEC/disable" ]] && root env -u PKEXEC_UID "$LIBEXEC/disable" --all
     local f
-    while IFS= read -r f; do
-        case "$f" in   # only paths an installer of ours could have written
-            "$LIBEXEC"/*|"$POLICY_DIR"/io.github.techbysakh963.ajar.policy|"$PREFIX"/*|/etc/xdg/autostart/ajar-tray.desktop) root rm -f -- "$f" ;;
+    local pkg_installed=0
+    dpkg-query -W -f='${Status}' ajar 2>/dev/null | grep -q 'ok installed' && pkg_installed=1
+    local entries=(); mapfile -t entries < "$MANIFEST"   # read fully first: the loop deletes it
+    for f in "${entries[@]}"; do
+        # no relative parts, no symlinks: an entry must name exactly the file we wrote
+        if [[ "$f" == *"/../"* || "$f" == *"/./"* || "$f" == *"/.." || -L "$f" ]]; then
+            warn "skipping suspicious manifest entry: $f"; continue
+        fi
+        if (( pkg_installed )) && dpkg -S "$f" >/dev/null 2>&1; then
+            warn "kept $f (owned by the installed ajar package)"; continue
+        fi
+        case "$f" in   # exactly the paths install() writes, nothing broader
+            "$LIBEXEC"/enable|"$LIBEXEC"/disable \
+            |"$POLICY_DIR"/io.github.techbysakh963.ajar.policy \
+            |"$PREFIX"/bin/ajar|"$PREFIX"/bin/ajar-tray \
+            |"$PREFIX"/share/ajar/ajar-ask|"$PREFIX"/share/ajar/install.sh|"$MANIFEST" \
+            |"$PREFIX"/share/icons/hicolor/scalable/apps/io.github.techbysakh963.Ajar*.svg \
+            |"$PREFIX"/share/icons/hicolor/scalable/status/ajar-*.svg \
+            |"$PREFIX"/share/applications/io.github.techbysakh963.Ajar.desktop \
+            |"$PREFIX/share/gnome-shell/extensions/$UUID"/*.js \
+            |"$PREFIX/share/gnome-shell/extensions/$UUID"/metadata.json \
+            |"$PREFIX/share/gnome-shell/extensions/$UUID"/stylesheet.css \
+            |"$PREFIX/share/gnome-shell/extensions/$UUID"/icons/ajar-*.svg \
+            |/etc/xdg/autostart/ajar-tray.desktop)
+                root rm -f -- "$f" ;;
             *) warn "skipping unexpected manifest entry: $f" ;;
         esac
-    done < "$MANIFEST"
+    done
     for d in "$PREFIX/share/gnome-shell/extensions/$UUID/icons" "$PREFIX/share/gnome-shell/extensions/$UUID" "$PREFIX/share/ajar" "$LIBEXEC"; do
         [[ -d "$d" ]] && root rmdir "$d" 2>/dev/null || true
     done

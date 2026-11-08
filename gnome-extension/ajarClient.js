@@ -3,10 +3,14 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-export const STATES = ['on', 'off', 'external', 'stale', 'unavailable'];
+export const STATES = ['on', 'off', 'external', 'stale', 'unknown', 'unavailable'];
+
+// Absolute paths only: a PATH lookup would let anything that can write ~/.local/bin decide
+// which program the toggle runs (and so which program asks for your password).
+export const AJAR_PATHS = ['/usr/bin/ajar', '/usr/local/bin/ajar'];
 
 export function ajarPath() {
-    return GLib.find_program_in_path('ajar') ?? '/usr/bin/ajar';
+    return AJAR_PATHS.find(p => GLib.file_test(p, GLib.FileTest.IS_EXECUTABLE)) ?? AJAR_PATHS[0];
 }
 
 /** Normalize `ajar status --json` output. Anything unexpected becomes {state: 'unavailable'}. */
@@ -22,7 +26,8 @@ export function parseStatus(text) {
     const remindAt = typeof s.remind_at === 'string' ? new Date(s.remind_at) : null;
     return {
         state: s.state,
-        open: s.state === 'on' || s.state === 'external',   // is sudo passwordless right now?
+        // is sudo (or may it be) passwordless right now? "unknown" counts as open, never as off
+        open: s.state === 'on' || s.state === 'external' || s.state === 'unknown',
         ours: s.ours === true,
         external: s.external === true,
         remindAt: remindAt && !isNaN(remindAt) ? remindAt : null,
@@ -40,13 +45,14 @@ export function describe(st) {
     case 'off':      return 'Asks for password';
     case 'external': return 'Open by another rule';
     case 'stale':    return 'Rule overridden';
+    case 'unknown':  return 'Probably on · cannot verify';
     default:         return 'Not installed';
     }
 }
 
 /** Icon name for a state (files ship in the extension's icons/ folder). */
 export function iconFor(st) {
-    if (st.state === 'external')
+    if (st.state === 'external' || st.state === 'unknown')
         return 'ajar-external-symbolic';
     return st.open ? 'ajar-open-symbolic' : 'ajar-closed-symbolic';
 }

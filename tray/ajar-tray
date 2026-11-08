@@ -4,7 +4,6 @@ and GNOME with an AppIndicator extension. A thin front end over the `ajar` CLI: 
 decides the state itself, it asks `ajar status --json` after every action."""
 import json
 import os
-import shutil
 import sys
 
 import gi
@@ -25,12 +24,15 @@ POLL_SECONDS = 60
 HERE = os.path.dirname(os.path.realpath(__file__))
 # Dev checkout: use the repo's icons and CLI. Installed: theme icons and the CLI on PATH.
 DEV_ICONS = os.path.join(HERE, '..', 'data', 'icons', 'hicolor', 'scalable')
-AJAR = shutil.which('ajar') or '/usr/bin/ajar'
-if os.path.exists(os.path.join(HERE, '..', 'bin', 'ajar')):
-    AJAR = os.path.join(HERE, '..', 'bin', 'ajar')
+# Absolute paths only (never PATH): see gnome-extension/ajarClient.js. A dev checkout uses
+# its own bin/ajar, found relative to this file, not through the environment.
+_DEV_AJAR = os.path.realpath(os.path.join(HERE, '..', 'bin', 'ajar'))
+AJAR = next((p for p in (_DEV_AJAR, '/usr/bin/ajar', '/usr/local/bin/ajar')
+             if os.access(p, os.X_OK) and (p != _DEV_AJAR or os.path.exists(os.path.join(HERE, '..', '.git')))),
+            '/usr/bin/ajar')
 
 ICON = {  # open states use a full-colour amber icon so every panel shows the warning colour
-    'on': 'ajar-tray-open', 'external': 'ajar-tray-external',
+    'on': 'ajar-tray-open', 'external': 'ajar-tray-external', 'unknown': 'ajar-tray-external',
     'off': 'ajar-closed-symbolic', 'stale': 'ajar-closed-symbolic',
     'unavailable': 'ajar-closed-symbolic',
 }
@@ -39,6 +41,7 @@ LABEL = {
     'off': 'Passwordless sudo is off',
     'external': 'Passwordless sudo is ON (another rule)',
     'stale': 'Passwordless sudo is off (Ajar rule overridden)',
+    'unknown': 'Passwordless sudo is probably ON (cannot verify)',
     'unavailable': 'Ajar is not installed correctly',
 }
 HINT = {
@@ -46,6 +49,7 @@ HINT = {
     'off': 'Turning on asks for your password. Turning off never does.',
     'external': 'Run "ajar doctor" in a terminal to find the rule.',
     'stale': 'Run "ajar doctor" in a terminal for details.',
+    'unknown': 'sudo will not list your rules without a password. Turning off still works.',
     'unavailable': 'The ajar command was not found.',
 }
 
@@ -189,11 +193,12 @@ class AjarTray:
             title += f" · reminder {st['remind_at'][11:16]}"
         self.title.set_label(title)
         self.hint.set_label(HINT[s])
-        is_open = s in ('on', 'external')
+        is_open = s in ('on', 'external', 'unknown')
         for i in self.on_items:
             i.set_visible(not is_open and s != 'unavailable')
-        for i in self.open_items:
-            i.set_visible(s == 'on')
+        self.open_items[0].set_visible(is_open)          # Turn off: whenever sudo may be open
+        for i in self.open_items[1:]:
+            i.set_visible(s == 'on')                     # reminders: only for Ajar's own rule
         self.cancel_item.set_visible(s == 'on' and bool(st.get('remind_at')))
         if self.ind:
             self.ind.set_icon_full(ICON[s], title)
