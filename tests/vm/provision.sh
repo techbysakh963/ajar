@@ -59,10 +59,18 @@ runcmd:
   - [reboot]
 EOF
 
+# Our own NoCloud seed (volume label "cidata"). Not virt-install --cloud-init: with --wait 0
+# virt-install exits at once and deletes its temporary seed before the guest can read it.
+seed="$VMDIR/$name-seed.iso"; sd="$(mktemp -d)"
+cp "$ud" "$sd/user-data"; printf 'instance-id: %s-%s\nlocal-hostname: %s\n' "$name" "$(date +%s)" "$name" > "$sd/meta-data"
+xorriso -as mkisofs -quiet -o "$seed" -V cidata -J -r "$sd/user-data" "$sd/meta-data"
+rm -rf "$sd"
+
 qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk" 24G
 virt-install --connect qemu:///system --name "$name" --memory 4096 --vcpus 2 \
-    --disk "path=$disk,format=qcow2" --import --os-variant detect=on,require=off \
+    --disk "path=$disk,format=qcow2" --disk "path=$seed,device=cdrom" \
+    --import --os-variant detect=on,require=off \
     --network network=default --graphics spice --video virtio --channel spicevmc \
     --channel unix,target.type=virtio,target.name=org.qemu.guest_agent.0 \
-    --cloud-init "user-data=$ud" --noautoconsole --wait 0
+    --noautoconsole --wait 0
 echo "$name: provisioning (desktop install takes 5-15 min). Password: $VMDIR/password"
