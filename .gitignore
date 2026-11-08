@@ -2,3 +2,4 @@ screenshots/raw/
 *.qcow2
 *.iso
 /dist/
+__pycache__/

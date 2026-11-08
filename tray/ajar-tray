@@ -1,0 +1,219 @@
+#!/usr/bin/python3 -I
+"""Ajar tray icon: passwordless sudo switch for Xfce, KDE, MATE, Cinnamon, Budgie, LXQt
+and GNOME with an AppIndicator extension. A thin front end over the `ajar` CLI: it never
+decides the state itself, it asks `ajar status --json` after every action."""
+import json
+import os
+import shutil
+import sys
+
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
+
+Indicator = None
+for _name in ('AyatanaAppIndicator3', 'AppIndicator3'):
+    try:
+        gi.require_version(_name, '0.1')
+        Indicator = getattr(__import__('gi.repository', fromlist=[_name]), _name)
+        break
+    except (ValueError, ImportError):
+        pass
+
+EXTENSION_UUID = 'ajar@techbysakh963.github.io'
+POLL_SECONDS = 60
+HERE = os.path.dirname(os.path.realpath(__file__))
+# Dev checkout: use the repo's icons and CLI. Installed: theme icons and the CLI on PATH.
+DEV_ICONS = os.path.join(HERE, '..', 'data', 'icons', 'hicolor', 'scalable')
+AJAR = shutil.which('ajar') or '/usr/bin/ajar'
+if os.path.exists(os.path.join(HERE, '..', 'bin', 'ajar')):
+    AJAR = os.path.join(HERE, '..', 'bin', 'ajar')
+
+ICON = {  # open states use a full-colour amber icon so every panel shows the warning colour
+    'on': 'ajar-tray-open', 'external': 'ajar-tray-external',
+    'off': 'ajar-closed-symbolic', 'stale': 'ajar-closed-symbolic',
+    'unavailable': 'ajar-closed-symbolic',
+}
+LABEL = {
+    'on': 'Passwordless sudo is ON',
+    'off': 'Passwordless sudo is off',
+    'external': 'Passwordless sudo is ON (another rule)',
+    'stale': 'Passwordless sudo is off (Ajar rule overridden)',
+    'unavailable': 'Ajar is not installed correctly',
+}
+HINT = {
+    'on': 'Any program running as you can become root without asking.',
+    'off': 'Turning on asks for your password. Turning off never does.',
+    'external': 'Run "ajar doctor" in a terminal to find the rule.',
+    'stale': 'Run "ajar doctor" in a terminal for details.',
+    'unavailable': 'The ajar command was not found.',
+}
+
+
+def gnome_toggle_active():
+    """On GNOME 45+ the Quick Settings toggle does this job; don't show a second icon."""
+    try:
+        settings = Gio.Settings.new('org.gnome.shell')
+        return EXTENSION_UUID in settings.get_strv('enabled-extensions')
+    except Exception:  # schema missing: not GNOME
+        return False
+
+
+def parse_status(text):
+    try:
+        st = json.loads(text)
+        if st.get('state') in LABEL:
+            return st
+    except (ValueError, AttributeError):
+        pass
+    return {'state': 'unavailable'}
+
+
+class AjarTray:
+    def __init__(self):
+        self.state = {'state': 'unavailable'}
+        self.busy = False
+        self.menu = Gtk.Menu()
+        self.title = self._item('', None, sensitive=False)
+        self.hint = self._item('', None, sensitive=False)
+        self.menu.append(Gtk.SeparatorMenuItem())
+        self.on_items = [
+            self._item('Turn on', lambda *_: self.turn_on(None)),
+            self._item('Turn on, remind me in 15 minutes', lambda *_: self.turn_on('15m')),
+            self._item('Turn on, remind me in 1 hour', lambda *_: self.turn_on('1h')),
+        ]
+        self.open_items = [
+            self._item('Turn off', lambda *_: self.turn_off()),
+            self._item('Remind me in 15 minutes', lambda *_: self.cli(['remind', '15m'])),
+            self._item('Remind me in 1 hour', lambda *_: self.cli(['remind', '1h'])),
+        ]
+        self.cancel_item = self._item('No reminder', lambda *_: self.cli(['remind', 'cancel']))
+        self.menu.append(Gtk.SeparatorMenuItem())
+        self._item('Quit tray icon', lambda *_: Gtk.main_quit())
+        self.menu.show_all()
+
+        if Indicator:
+            self.ind = Indicator.Indicator.new(
+                'ajar', ICON['off'], Indicator.IndicatorCategory.SYSTEM_SERVICES)
+            if os.path.isdir(DEV_ICONS):
+                self.ind.set_icon_theme_path(os.path.realpath(os.path.join(DEV_ICONS, 'status')))
+            self.ind.set_status(Indicator.IndicatorStatus.ACTIVE)
+            self.ind.set_title('Ajar')
+            self.ind.set_menu(self.menu)
+            self.ind.set_secondary_activate_target(self.open_items[0])  # middle-click: turn off
+            self.status_icon = None
+        else:  # XEmbed tray fallback (old panels)
+            self.ind = None
+            self.status_icon = Gtk.StatusIcon()
+            self.status_icon.connect('popup-menu', lambda i, b, t: self.menu.popup(
+                None, None, Gtk.StatusIcon.position_menu, i, b, t))
+            self.status_icon.connect('activate', lambda *_: self.menu.popup(
+                None, None, None, None, 0, Gtk.get_current_event_time()))
+
+        # Instant refresh when sudoers.d changes, plus a slow poll for everything else.
+        self.monitor = Gio.File.new_for_path('/etc/sudoers.d').monitor_directory(
+            Gio.FileMonitorFlags.NONE, None)
+        self.monitor.connect('changed', lambda *_: self.refresh_soon())
+        self._soon = 0
+        GLib.timeout_add_seconds(POLL_SECONDS, lambda: self.refresh() or True)
+        self.refresh()
+
+    def _item(self, label, callback, sensitive=True):
+        item = Gtk.MenuItem(label=label)
+        item.set_sensitive(sensitive)
+        if callback:
+            item.connect('activate', callback)
+        self.menu.append(item)
+        return item
+
+    # ---- CLI calls (async, never block the panel) ----
+    def run(self, args, done):
+        try:
+            proc = Gio.Subprocess.new([AJAR, *args],
+                                      Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE)
+        except GLib.Error as e:
+            done(False, -1, '', str(e))
+            return
+
+        def finished(p, res):
+            try:
+                _, out, err = p.communicate_utf8_finish(res)
+            except GLib.Error as e:
+                done(False, -1, '', str(e))
+                return
+            done(p.get_successful(), p.get_exit_status(), out or '', err or '')
+        proc.communicate_utf8_async(None, None, finished)
+
+    def refresh(self):
+        self.run(['status', '--json'], lambda ok, code, out, err: self.show(
+            parse_status(out if ok else '')))
+
+    def refresh_soon(self):
+        if not self._soon:
+            self._soon = GLib.timeout_add(300, self._soon_done)
+
+    def _soon_done(self):
+        self._soon = 0
+        self.refresh()
+        return False
+
+    def cli(self, args):
+        if self.busy:
+            return
+        self.busy = True
+
+        def done(ok, code, out, err):
+            self.busy = False
+            # 126 = password dialog dismissed: not an error worth reporting
+            if not ok and code != 126:
+                self.error((err or out).strip() or f'ajar {args[0]} failed ({code})')
+            self.refresh()
+        self.run(args, done)
+
+    def turn_on(self, remind):
+        self.cli(['on'] + (['--remind', remind] if remind else []))
+
+    def turn_off(self):
+        self.cli(['off'])
+
+    def error(self, text):
+        GLib.spawn_async(['notify-send', '-a', 'Ajar', '-u', 'normal', 'Ajar', text],
+                         flags=GLib.SpawnFlags.SEARCH_PATH)
+
+    # ---- view ----
+    def show(self, st):
+        self.state = st
+        s = st['state']
+        title = LABEL[s]
+        if s == 'on' and st.get('remind_at'):
+            title += f" · reminder {st['remind_at'][11:16]}"
+        self.title.set_label(title)
+        self.hint.set_label(HINT[s])
+        is_open = s in ('on', 'external')
+        for i in self.on_items:
+            i.set_visible(not is_open and s != 'unavailable')
+        for i in self.open_items:
+            i.set_visible(s == 'on')
+        self.cancel_item.set_visible(s == 'on' and bool(st.get('remind_at')))
+        if self.ind:
+            self.ind.set_icon_full(ICON[s], title)
+            self.ind.set_title(f'Ajar: {title}')
+        else:
+            self.status_icon.set_from_icon_name(ICON[s])
+            self.status_icon.set_tooltip_text(title)
+
+
+def main():
+    if '--force' not in sys.argv and gnome_toggle_active():
+        print('ajar-tray: the GNOME Quick Settings toggle is active; not starting the tray icon.')
+        return 0
+    if Indicator is None and not hasattr(Gtk, 'StatusIcon'):
+        print('ajar-tray: no tray support (install gir1.2-ayatanaappindicator3-0.1)', file=sys.stderr)
+        return 1
+    AjarTray()
+    Gtk.main()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
