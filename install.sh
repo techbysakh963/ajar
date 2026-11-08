@@ -200,7 +200,9 @@ fetch_release() {
         echo "or download install.sh from https://github.com/$REPO/releases" >&2
         exit 1; }
     command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
-    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064  # expand now: the trap fires after main's locals are gone
+    trap "rm -rf '$tmp'" EXIT
     # AJAR_RELEASE_BASE only exists for testing against a local mirror; the embedded
     # checksum still has to match, so it cannot be used to install something else.
     local base="${AJAR_RELEASE_BASE:-https://github.com/$REPO/releases/download/v$AJAR_VERSION}"
@@ -227,9 +229,11 @@ put() {   # put <mode> <src> <dest>: install as root:root and record in the mani
 confirm() {
     (( yes )) && return 0
     local reply=""
-    if [[ -r /dev/tty ]]; then
-        printf '\nProceed? [y/N] ' > /dev/tty
-        read -r reply < /dev/tty || true
+    # -r /dev/tty can be true with no controlling terminal (cron, ssh -T); try to open it.
+    if { exec 3<>/dev/tty; } 2>/dev/null; then
+        printf '\nProceed? [y/N] ' >&3
+        read -r reply <&3 || true
+        exec 3>&-
     else
         echo "No terminal to ask on; re-run with --yes to proceed non-interactively." >&2
         return 1
