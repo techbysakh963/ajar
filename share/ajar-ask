@@ -11,6 +11,7 @@ so a separate `gdbus monitor` never sees them, and libnotify's notify-send refus
 on some systems. Unprivileged; runs as the desktop user.
 """
 import os
+import signal
 import sys
 
 from gi.repository import Gio, GLib
@@ -50,6 +51,16 @@ def main(argv):
                                                              actions, hints, 0)),
                            GLib.VariantType('(u)'), Gio.DBusCallFlags.NONE, -1, None)
     state['id'] = reply[0]
+
+    def withdraw():   # stopped (e.g. sudo was turned off elsewhere): remove our notification
+        try:
+            conn.call_sync(BUS, PATH, IFACE, 'CloseNotification', GLib.Variant('(u)', (state['id'],)),
+                           None, Gio.DBusCallFlags.NONE, 2000, None)
+        except GLib.Error:
+            pass
+        loop.quit()
+        return GLib.SOURCE_REMOVE
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, withdraw)
     print(f"id={state['id']}", flush=True)
     if os.environ.get('AJAR_ID_FILE'):
         with open(os.environ['AJAR_ID_FILE'], 'w') as f:

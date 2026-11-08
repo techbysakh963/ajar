@@ -249,7 +249,7 @@ cmd_fire_reminder() {
     fi
     log "reminder answered: ${choice:-dismissed}"
     case "$choice" in
-        off)   cmd_off ;;
+        off)   AJAR_IN_REMINDER=1 cmd_off ;;
         again) cmd_remind "$again" >/dev/null ;;
     esac
 }
@@ -305,6 +305,9 @@ cmd_on() {
 cmd_off() {
     read_state
     systemctl --user stop "$UNIT.timer" 2>/dev/null
+    # A reminder already on screen would still offer "Turn off" for something that is off.
+    # Not when we are that reminder (its own Turn off button): stopping it would stop us.
+    [[ -z "${AJAR_IN_REMINDER:-}" ]] && systemctl --user stop "$UNIT.service" 2>/dev/null
     # Don't rely only on OURS: it is a file check made with the user's permissions, and a
     # locked-down /etc/sudoers.d (0750) hides the file. The helper is idempotent, so run it
     # whenever sudo is effectively passwordless or our file is visible.

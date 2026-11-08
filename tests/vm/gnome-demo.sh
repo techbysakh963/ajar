@@ -30,6 +30,9 @@ rec_stop() { kill "$REC" 2>/dev/null; wait "$REC" 2>/dev/null || true; }
 trap 'rec_stop' EXIT
 
 [[ "$(state)" == off ]] || { vrun 'ajar off' >/dev/null; wait_state off; }
+# a clean desktop: no first-run welcome window, no leftover notifications
+vrun 'mkdir -p ~/.config && echo yes > ~/.config/gnome-initial-setup-done; pkill -f '^/usr/libexec/gnome-initial-setup'; true'
+veval 'Main.messageTray._notificationQueue?.forEach?.(n => n.destroy()); Main.panel.statusArea.dateMenu._messageList?._sectionList?.get_children?.().forEach?.(s => s.clear?.()); "ok"' >/dev/null || true
 qs_close; sleep 1
 
 rec_start
@@ -37,7 +40,8 @@ sleep 1.5
 qs_open;                       sleep 2;   vshot "$out/01-quick-settings-off.png" >/dev/null
 click;                         sleep 3;   vshot "$out/02-password-dialog.png" >/dev/null
 vtype_password; sleep 0.4;     vkey KEY_ENTER
-wait_state on;                 sleep 2.5; vshot "$out/03-quick-settings-on.png" >/dev/null
+wait_state on;                 sleep 2.5; vshot "$out/03-on-notification.png" >/dev/null
+qs_open;                       sleep 2;   vshot "$out/03b-quick-settings-on.png" >/dev/null
 submenu;                       sleep 2.5; vshot "$out/04-toggle-menu.png" >/dev/null
 qs_close;                      sleep 2.5; vshot "$out/05-top-bar-amber-door.png" >/dev/null
 vrun 'ajar remind 3s' >/dev/null
