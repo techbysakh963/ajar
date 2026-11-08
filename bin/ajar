@@ -201,7 +201,7 @@ cmd_remind() {
     systemctl --user reset-failed "$UNIT.timer" "$UNIT.service" 2>/dev/null
     [[ "$arg" == cancel ]] && { say "Reminder cancelled."; return 0; }
     valid_duration "$arg" || { err "invalid duration '$arg' (examples: 90s, 15m, 1h30m)"; return 2; }
-    systemd-run --user --quiet --unit="$UNIT" --on-active="$arg" --timer-property=AccuracySec=5s \
+    systemd-run --user --quiet --unit="$UNIT" --on-active="$arg" --timer-property=AccuracySec=1s \
         "$(readlink -f "$0")" __fire-reminder "$arg" \
         || { err "could not schedule the reminder (is a systemd user session running?)"; return 1; }
     log "reminder set for $arg"

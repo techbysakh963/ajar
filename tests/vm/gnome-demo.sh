@@ -45,7 +45,7 @@ qs_open;                       sleep 2;   vshot "$out/03b-quick-settings-on.png"
 submenu;                       sleep 2.5; vshot "$out/04-toggle-menu.png" >/dev/null
 qs_close;                      sleep 2.5; vshot "$out/05-top-bar-amber-door.png" >/dev/null
 vrun 'ajar remind 3s' >/dev/null
-sleep 6;                                  vshot "$out/06-reminder.png" >/dev/null
+sleep 7;                                  vshot "$out/06-reminder.png" >/dev/null
 qs_open;                       sleep 1.5
 click; wait_state off;         sleep 2.5; vshot "$out/07-turned-off.png" >/dev/null
 qs_close;                      sleep 1.5
