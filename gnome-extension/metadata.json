@@ -1,8 +1,15 @@
 {
   "uuid": "ajar@techbysakh963.github.io",
   "name": "Ajar",
-  "description": "Quick Settings toggle for passwordless sudo. On: sudo runs without a password, and an amber door in the top bar reminds you. Off: sudo asks for your password. Turning on always asks for your password; turning off never does. Needs the ajar command (see the project page).",
-  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "description": "Quick Settings toggle for passwordless sudo, with an amber door in the top bar while it is on.\n\nRequires the Ajar package, installed separately from https://github.com/techbysakh963/ajar (a .deb for Ubuntu, Debian and Kali). This extension contains no scripts or binaries. It only runs the root-owned ajar command (/usr/bin/ajar or /usr/local/bin/ajar). To turn passwordless sudo on, that command asks polkit for your password (pkexec) and runs a fixed, root-owned helper in /usr/libexec/ajar. Turning it off needs no password from your own session. Without the package, the tile shows \"Not installed\".",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
   "url": "https://github.com/techbysakh963/ajar",
   "version-name": "1.0.0"
 }
