@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- GitHub social preview (1280x640). Render with:
+     google-chrome --headless=new --window-size=1280,640 --screenshot=social-preview.png tools/social-preview.html
+     Needs site/bar.jpg and the app icon next to it (paths below are relative to tools/). -->
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=IBM+Plex+Sans:wght@400;500&display=block" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #14161f; }
+  .room { position: relative; width: 1280px; height: 640px; color: #ece6da; font-family: "IBM Plex Sans", sans-serif; }
+  /* the real top bar, with the amber door at 59.3% across */
+  .bar { position: absolute; top: 34px; right: 28px; width: 900px;
+         -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent); }
+  /* light falling from the door: door at x = 1280 - 28 - 900 + 0.593*900 = 886, y = 34 + 97 = 131 */
+  .light { position: absolute; top: 131px; right: calc(1280px - 886px); width: 980px; height: 640px; transform-origin: 100% 0;
+           background: linear-gradient(200deg, rgba(255,176,0,.36) 0%, rgba(255,176,0,.11) 40%, transparent 75%);
+           clip-path: polygon(100% 0, 96% 0, 0 100%, 46% 100%); filter: blur(2px); }
+  h1 { position: absolute; left: 72px; top: 214px; margin: 0; width: 900px;
+       font: 800 132px/.88 "Big Shoulders Display", sans-serif; letter-spacing: -.005em; }
+  p  { position: absolute; left: 76px; top: 474px; margin: 0; width: 600px; font-size: 25px; line-height: 1.4; color: #c9c4bb; }
+  .brand { position: absolute; left: 72px; top: 64px; display: flex; align-items: center; gap: 14px;
+           font: 800 44px/1 "Big Shoulders Display", sans-serif; }
+  .brand img { width: 52px; height: 52px; }
+</style></head>
+<body><div class="room">
+  <div class="light"></div>
+  <img class="bar" src="../site/bar.jpg" alt="">
+  <div class="brand"><img src="../data/icons/hicolor/scalable/apps/io.github.techbysakh963.Ajar.svg" alt="">Ajar</div>
+  <h1>Leave sudo open<br>on purpose.</h1>
+  <p>Passwordless sudo you switch on and off, for GNOME, Xfce, KDE and the terminal.</p>
+</div></body></html>
