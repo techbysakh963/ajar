@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajar · Passwordless sudo switch for Linux (GNOME, Xfce, KDE)</title>
+<meta name="description" content="Ajar turns passwordless sudo on and off from GNOME Quick Settings, a tray icon on Xfce, KDE and Kali, or the terminal. Turning on always asks for your password; an amber door shows while sudo is open.">
+<link rel="canonical" href="https://techbysakh963.github.io/ajar/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Ajar: leave sudo open on purpose, and close it in one click">
+<meta property="og:description" content="A passwordless sudo switch for GNOME, Xfce, KDE and the terminal. Polkit-gated, visible, and easy to turn off.">
+<meta property="og:url" content="https://techbysakh963.github.io/ajar/">
+<meta property="og:image" content="https://techbysakh963.github.io/ajar/hero.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#14161f">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ajar","applicationCategory":"UtilitiesApplication","operatingSystem":"Linux (Ubuntu, Debian, Kali)","description":"Switch passwordless sudo on and off from GNOME Quick Settings, a tray icon, or the command line. Turning on is gated by polkit.","softwareVersion":"1.0.0","license":"https://opensource.org/licenses/MIT","url":"https://techbysakh963.github.io/ajar/","downloadUrl":"https://github.com/techbysakh963/ajar/releases/latest","codeRepository":"https://github.com/techbysakh963/ajar","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+<style>
+:root {
+  --night: #14161f;
+  --wall: #1d2030;
+  --edge: #2a2e42;
+  --lamp: #ffb000;
+  --paper: #ece6da;
+  --dust: #8b8fa3;
+  --measure: 34rem;
+  --gutter: clamp(1.25rem, 5vw, 4rem);
+}
+* { box-sizing: border-box; }
+html { background: var(--night); }
+body {
+  margin: 0; color: var(--paper); background: var(--night);
+  font: 400 1.0625rem/1.65 "IBM Plex Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+a { color: var(--paper); text-underline-offset: 0.2em; text-decoration-color: color-mix(in srgb, var(--paper) 40%, transparent); }
+a:hover { text-decoration-color: var(--paper); }
+:focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; border-radius: 4px; }
+img { max-width: 100%; height: auto; display: block; }
+code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.wrap { max-width: 72rem; margin: 0 auto; padding: 0 var(--gutter); }
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: var(--gutter); top: 1rem; background: var(--wall); padding: .5rem 1rem; z-index: 5; }
+
+/* ---------- top line ---------- */
+.site-head { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0; position: relative; z-index: 2; }
+.brand { display: flex; align-items: center; gap: .6rem; font: 800 1.5rem/1 "Big Shoulders Display", sans-serif; letter-spacing: .02em; text-decoration: none; }
+.brand img { width: 32px; height: 32px; }
+.site-head nav { display: flex; gap: 1.5rem; font-size: .95rem; }
+
+/* ---------- hero: the room and the light from the door ---------- */
+.hero { position: relative; padding: clamp(2rem, 6vw, 5rem) 0 clamp(4rem, 9vw, 7rem); isolation: isolate; }
+.light {
+  /* a wedge of warm light, hinged at the door in the top bar, falling down and left */
+  position: absolute; z-index: -1; pointer-events: none;
+  top: calc(var(--door-y, 210px)); right: var(--door-x, 22%);
+  width: min(78vw, 1100px); height: min(120vh, 1100px);
+  transform-origin: 100% 0;
+  background: linear-gradient(200deg, color-mix(in srgb, var(--lamp) 34%, transparent) 0%, color-mix(in srgb, var(--lamp) 10%, transparent) 38%, transparent 72%);
+  clip-path: polygon(100% 0, 96% 0, 0 100%, 46% 100%);
+  filter: blur(2px);
+  animation: open 1.6s cubic-bezier(.2,.7,.1,1) .25s both;
+}
+@keyframes open {
+  from { clip-path: polygon(100% 0, 99.5% 0, 98% 100%, 99% 100%); opacity: .2; }
+  to   { clip-path: polygon(100% 0, 96% 0, 0 100%, 46% 100%); opacity: 1; }
+}
+.hero-grid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr); gap: clamp(2rem, 5vw, 5rem); align-items: start; }
+h1 {
+  margin: 0; font: 800 clamp(3.4rem, 9vw, 7.25rem)/.88 "Big Shoulders Display", sans-serif;
+  letter-spacing: -.005em; text-wrap: balance;
+}
+.lede { margin: 1.75rem 0 0; max-width: var(--measure); font-size: 1.2rem; line-height: 1.55; color: color-mix(in srgb, var(--paper) 88%, var(--dust)); }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2.25rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem; padding: .8rem 1.25rem; border-radius: 10px;
+  font: 500 1rem/1 "IBM Plex Sans", sans-serif; text-decoration: none; color: var(--paper);
+  border: 1px solid var(--edge); background: var(--wall);
+}
+.btn:hover { border-color: color-mix(in srgb, var(--paper) 45%, var(--edge)); }
+.btn.primary { background: var(--paper); color: var(--night); border-color: var(--paper); }
+.btn.primary:hover { background: #fff; }
+.bar { margin: clamp(1rem, 4vw, 3rem) 0 0; }
+.bar img {
+  width: 100%;
+  /* the crop cuts through the glow: fade its top and bottom edges into the room */
+  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+          mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+}
+.bar figcaption { margin-top: .9rem; color: var(--dust); font-size: .95rem; }
+
+/* ---------- sections ---------- */
+section { padding: clamp(3.5rem, 8vw, 6.5rem) 0; }
+h2 { margin: 0 0 1rem; font: 800 clamp(2.2rem, 5vw, 3.4rem)/.95 "Big Shoulders Display", sans-serif; letter-spacing: .005em; }
+.intro { max-width: var(--measure); margin: 0 0 2.5rem; color: color-mix(in srgb, var(--paper) 85%, var(--dust)); }
+
+.demo-frame { border-radius: 16px; overflow: hidden; border: 1px solid var(--edge); max-width: 800px; background: #0f1017; }
+
+.install-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.cmd h3 { margin: 0 0 .5rem; font: 600 1.05rem/1.3 "IBM Plex Sans", sans-serif; }
+.cmd p { margin: 0; color: var(--dust); font-size: .95rem; max-width: 30rem; }
+.code { position: relative; background: var(--wall); border: 1px solid var(--edge); border-radius: 12px; margin-top: 2.4rem; }
+.code pre { margin: 0; padding: 1.1rem 1.2rem; overflow-x: auto; font-size: .88rem; line-height: 1.7; color: var(--paper); }
+.copy {
+  /* sits just above the block, so it never covers a long command */
+  position: absolute; top: -2.2rem; right: 0; padding: .4rem .7rem; border-radius: 8px;
+  border: 1px solid var(--edge); background: var(--night); color: var(--paper); font: 500 .8rem/1 "IBM Plex Sans", sans-serif; cursor: pointer;
+}
+.copy:hover { border-color: var(--dust); }
+.note { margin-top: 1.5rem; color: var(--dust); font-size: .95rem; max-width: 46rem; }
+
+.states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--edge); border-radius: 16px; overflow: hidden; }
+.state { padding: clamp(1.5rem, 3vw, 2.5rem); }
+.state + .state { border-left: 1px solid var(--edge); }
+.state.open { background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--lamp) 14%, transparent), transparent 60%); }
+.state img { width: 40px; height: 40px; margin-bottom: 1.25rem; }
+.state h3 { margin: 0 0 .6rem; font: 800 2rem/1 "Big Shoulders Display", sans-serif; }
+.state ul { margin: 0; padding-left: 1.1rem; color: color-mix(in srgb, var(--paper) 88%, var(--dust)); }
+.state li + li { margin-top: .45rem; }
+
+.warning { max-width: 46rem; border-left: 3px solid var(--lamp); padding: .25rem 0 .25rem 1.5rem; }
+.warning p { margin: 0 0 1rem; font-size: 1.15rem; }
+.warning p:last-child { margin: 0; font-size: 1rem; color: var(--dust); }
+
+.desktops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--edge); }
+.desktops div { padding: 1.5rem 1.5rem 1.5rem 0; border-bottom: 1px solid var(--edge); }
+.desktops h3 { margin: 0 0 .35rem; font: 600 1.05rem/1.3 "IBM Plex Sans", sans-serif; }
+.desktops p { margin: 0; color: var(--dust); font-size: .95rem; }
+
+.site-foot { padding: 3rem 0 4rem; border-top: 1px solid var(--edge); color: var(--dust); font-size: .95rem; display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; }
+.site-foot nav { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+
+@media (max-width: 860px) {
+  /* minmax(0, 1fr), not 1fr: a 1fr track won't shrink below a long command line */
+  .hero-grid, .install-grid, .states { grid-template-columns: minmax(0, 1fr); }
+  .state + .state { border-left: 0; border-top: 1px solid var(--edge); }
+  .desktops { grid-template-columns: minmax(0, 1fr); }
+  .light { width: 140vw; right: 8%; }
+  .site-head nav a.hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .light { animation: none; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#install">Skip to install</a>
+<div class="wrap">
+  <header class="site-head">
+    <a class="brand" href="./"><img src="icon.svg" alt="" width="32" height="32">Ajar</a>
+    <nav aria-label="Main">
+      <a href="#install">Install</a>
+      <a class="hide-sm" href="https://github.com/techbysakh963/ajar/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/techbysakh963/ajar">GitHub</a>
+    </nav>
+  </header>
+</div>
+
+<main id="main">
+  <div class="hero">
+    <div class="light" aria-hidden="true"></div>
+    <div class="wrap hero-grid">
+      <div>
+        <h1>Leave sudo open on purpose.</h1>
+        <p class="lede">Ajar switches passwordless sudo on and off from your desktop. Turning it on asks for your password. While it is on, an amber door sits in your top bar. Turning it off takes one click.</p>
+        <div class="actions">
+          <a class="btn primary" href="#install">Install Ajar</a>
+          <a class="btn" href="https://github.com/techbysakh963/ajar">Source on GitHub</a>
+        </div>
+      </div>
+      <figure class="bar">
+        <img id="bar" src="bar.jpg" width="1200" height="260" alt="A real GNOME top bar with an amber open door next to the network, volume and power icons: sudo is passwordless right now.">
+        <figcaption>The door in the top bar is the whole interface while it is on.</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <section aria-labelledby="see">
+    <div class="wrap">
+      <h2 id="see">Before and after</h2>
+      <p class="intro">The same command, a few seconds apart. In between, one click in Quick Settings and the system's own password dialog.</p>
+      <div class="demo-frame">
+        <img src="demo.gif" width="800" height="624" loading="lazy" alt="A terminal runs sudo whoami and is asked for a password. In Quick Settings the Sudo tile is clicked, the polkit dialog accepts the password, and the tile reads No password with an amber door in the top bar. The terminal runs sudo whoami again and prints root without asking.">
+      </div>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <h2 id="install-h">Install</h2>
+      <p class="intro">For Ubuntu, Debian and Kali. Both ways install the same thing.</p>
+      <div class="install-grid">
+        <div class="cmd">
+          <h3>The package</h3>
+          <p>Apt pulls in what is missing, and removing it turns passwordless sudo off for everyone.</p>
+          <div class="code"><pre><code>curl -fsSLO https://github.com/techbysakh963/ajar/releases/latest/download/ajar_1.0.0_all.deb
+sudo apt install ./ajar_1.0.0_all.deb</code></pre><button class="copy" type="button">Copy</button></div>
+        </div>
+        <div class="cmd">
+          <h3>The installer</h3>
+          <p>Shows every change and asks before making it. Add <code>--dry-run</code> to only look.</p>
+          <div class="code"><pre><code>curl -fsSL https://github.com/techbysakh963/ajar/releases/download/v1.0.0/install.sh | bash</code></pre><button class="copy" type="button">Copy</button></div>
+        </div>
+      </div>
+      <p class="note">On GNOME, log out and back in once, then find <strong>Sudo</strong> in Quick Settings. Everywhere else the door appears in your panel's tray. The installer only accepts the release it was built for: it checks the download's SHA-256 before installing anything.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="states">
+    <div class="wrap">
+      <h2 id="states">Two states, nothing in between</h2>
+      <p class="intro">Ajar never guesses. It asks sudo what it will really do, and shows you that.</p>
+      <div class="states">
+        <div class="state">
+          <img src="closed.svg" alt="" width="40" height="40">
+          <h3>Closed</h3>
+          <ul>
+            <li>sudo asks for your password, as always.</li>
+            <li>Opening it shows the system password dialog, every time.</li>
+            <li>If another rule already gives you passwordless sudo, Ajar says so instead of showing closed.</li>
+          </ul>
+        </div>
+        <div class="state open">
+          <img src="open.svg" alt="" width="40" height="40">
+          <h3>Open</h3>
+          <ul>
+            <li>sudo runs without asking, for you only.</li>
+            <li>An amber door stays in the top bar or tray.</li>
+            <li>Optional reminder after 15 minutes or an hour, with a Turn off button. It never cuts sudo off mid-task.</li>
+            <li>Closing it needs no password from your own desktop. From SSH it does.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="honest">
+    <div class="wrap">
+      <h2 id="honest">What open means</h2>
+      <div class="warning">
+        <p>While Ajar is open, any program running as you can become root without asking. A script you pasted, a package's install hook, an AI agent: all of them.</p>
+        <p>That is what passwordless sudo is. Ajar makes it deliberate, visible and quick to end. The full threat model, including what Ajar does not protect, is in <a href="https://github.com/techbysakh963/ajar/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="where">
+    <div class="wrap">
+      <h2 id="where">Where it runs</h2>
+      <p class="intro">Tested on real installs, not only in containers.</p>
+      <div class="desktops">
+        <div><h3>GNOME 45 to 50</h3><p>A Sudo tile in Quick Settings. Ubuntu 24.04 and 26.04, Debian 13.</p></div>
+        <div><h3>Xfce, KDE, MATE, Cinnamon</h3><p>A tray icon. Kali Linux, and GNOME 43 on Debian 12.</p></div>
+        <div><h3>Any terminal</h3><p><code>ajar on</code>, <code>ajar off</code>, <code>ajar status</code>, <code>ajar doctor</code>. Works with sudo and sudo-rs.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="wrap">
+  <footer class="site-foot">
+    <span>Ajar 1.0.0, MIT licensed.</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/techbysakh963/ajar/releases">Releases</a>
+      <a href="https://github.com/techbysakh963/ajar/issues/new/choose">Report a problem</a>
+      <a href="https://github.com/techbysakh963/ajar/security/advisories/new">Report a vulnerability privately</a>
+    </nav>
+  </footer>
+</div>
+
+<script>
+// Hinge the light on the door in the top bar image (59.3% across, halfway down).
+const bar = document.getElementById('bar'), light = document.querySelector('.light'), hero = document.querySelector('.hero');
+function placeLight() {
+  const b = bar.getBoundingClientRect(), h = hero.getBoundingClientRect();
+  const x = b.left - h.left + b.width * 0.593, y = b.top - h.top + b.height * 0.5;
+  light.style.right = (h.width - x) + 'px';
+  light.style.top = y + 'px';
+}
+if (bar.complete) placeLight(); else bar.addEventListener('load', placeLight);
+addEventListener('resize', placeLight);
+
+document.querySelectorAll('.copy').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const text = btn.previousElementSibling.innerText.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied';
+    } catch {
+      const r = document.createRange(); r.selectNodeContents(btn.previousElementSibling);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = 'Selected';
+    }
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+  });
+});
+</script>
+</body>
+</html>

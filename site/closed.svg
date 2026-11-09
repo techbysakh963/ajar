@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- frame: jambs + lintel on whole pixels -->
+  <path d="M1 15V1h14v14h-2V3H3v12z" fill="#ece6da"/>
+  <!-- door shut, with a 2px knob cut-out -->
+  <path d="M4 4h8v11H4z M9 9v2h2V9z" fill="#ece6da" fill-rule="evenodd"/>
+</svg>
