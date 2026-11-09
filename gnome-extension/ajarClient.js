@@ -57,7 +57,8 @@ export function iconFor(st) {
     return st.open ? 'ajar-open-symbolic' : 'ajar-closed-symbolic';
 }
 
-/** Run argv; resolves with its result. Cancelling `cancellable` stops the process. */
+/** Run argv; resolves with its result. Cancelling `cancellable` stops the process, so only
+ *  pass one for read-only calls (status): state changes must always run to completion. */
 export function run(argv, cancellable = null) {
     return new Promise(resolve => {
         let proc;
@@ -86,21 +87,21 @@ export async function status(cancellable = null) {
 }
 
 /** Turn on (shows the polkit password dialog). remind: '15m' | '1h' | null */
-export async function turnOn(remind = null, cancellable = null) {
+export async function turnOn(remind = null) {
     const argv = [ajarPath(), 'on'];
     if (remind)
         argv.push('--remind', remind);
-    const r = await run(argv, cancellable);
+    const r = await run(argv);
     // 126 = dialog dismissed; 127 = not authorized / no agent (see `ajar on`)
     return {ok: r.ok, cancelled: r.status === 126, error: r.ok ? null : r.stderr.trim()};
 }
 
-export async function turnOff(cancellable = null) {
-    const r = await run([ajarPath(), 'off'], cancellable);
+export async function turnOff() {
+    const r = await run([ajarPath(), 'off']);
     return {ok: r.ok, external: r.status === 5, error: r.ok ? null : (r.stdout + r.stderr).trim()};
 }
 
-export async function remind(arg, cancellable = null) {
-    const r = await run([ajarPath(), 'remind', arg], cancellable);
+export async function remind(arg) {
+    const r = await run([ajarPath(), 'remind', arg]);
     return {ok: r.ok, error: r.ok ? null : r.stderr.trim()};
 }

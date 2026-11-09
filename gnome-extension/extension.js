@@ -85,7 +85,10 @@ class AjarToggle extends QuickMenuToggle {
     _on(remind) {
         this.menu.close();
         return this._act(async () => {
-            const r = await Ajar.turnOn(remind, this._ext.cancellable);
+            // on/off/remind are never cancelled: GNOME disables extensions when the screen
+            // locks, and killing `ajar off` half-way would leave sudo open. They finish on
+            // their own; only the read-only status refresh is tied to the extension.
+            const r = await Ajar.turnOn(remind);
             if (!r.ok && !r.cancelled)
                 Main.notifyError('Ajar', r.error || 'Could not turn on passwordless sudo.');
         });
@@ -93,7 +96,7 @@ class AjarToggle extends QuickMenuToggle {
 
     _off() {
         return this._act(async () => {
-            const r = await Ajar.turnOff(this._ext.cancellable);
+            const r = await Ajar.turnOff();
             if (r.external)
                 Main.notify('Ajar', 'Passwordless sudo comes from a rule Ajar does not manage. Run "ajar doctor" to find it.');
             else if (!r.ok)
@@ -103,7 +106,7 @@ class AjarToggle extends QuickMenuToggle {
 
     _remind(arg) {
         this.menu.close();
-        return this._act(() => Ajar.remind(arg, this._ext.cancellable));
+        return this._act(() => Ajar.remind(arg));
     }
 });
 
@@ -128,7 +131,7 @@ class AjarIndicator extends SystemIndicator {
 
 export default class AjarExtension extends Extension {
     enable() {
-        this.cancellable = new Gio.Cancellable();   // stops any running ajar call on disable()
+        this.cancellable = new Gio.Cancellable();   // stops a running status refresh on disable()
         this._icons = new Map();
         this._indicator = new AjarIndicator(this);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
