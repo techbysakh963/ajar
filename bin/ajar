@@ -7,7 +7,7 @@ set -uo pipefail
 # (`bash -p` above also ignores BASH_ENV and functions exported into the environment.)
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 
-readonly VERSION="1.0.0"
+readonly VERSION="1.0.1"
 readonly LIBEXEC=/usr/libexec/ajar
 readonly SUDOERS_D=/etc/sudoers.d
 readonly PKEXEC=/usr/bin/pkexec

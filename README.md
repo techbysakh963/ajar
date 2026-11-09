@@ -31,14 +31,14 @@ worse. **Ajar** is the middle ground:
 **Debian, Ubuntu, Kali** — the package (recommended):
 
 ```bash
-curl -fsSLO https://github.com/techbysakh963/ajar/releases/latest/download/ajar_1.0.0_all.deb
-sudo apt install ./ajar_1.0.0_all.deb
+curl -fsSLO https://github.com/techbysakh963/ajar/releases/download/v1.0.1/ajar_1.0.1_all.deb
+sudo apt install ./ajar_1.0.1_all.deb
 ```
 
 **Or the installer** (shows every change and asks before making it):
 
 ```bash
-curl -fsSL https://github.com/techbysakh963/ajar/releases/download/v1.0.0/install.sh | bash
+curl -fsSL https://github.com/techbysakh963/ajar/releases/download/v1.0.1/install.sh | bash
 ```
 
 | Option | |

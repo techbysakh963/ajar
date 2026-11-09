@@ -46,6 +46,7 @@ Recording parser fixtures for a new distribution or sudo version:
 
 ## Releasing
 
-1. Bump `VERSION` in `bin/ajar` and `version-name` in `gnome-extension/metadata.json`.
+1. Bump `VERSION` in `bin/ajar`, `version-name` in `gnome-extension/metadata.json`, and the
+   pinned download links in `README.md` and `site/index.html` (`tests/static.sh` checks they match).
 2. Run every test above, plus the manual dialog check in SECURITY.md, on a real desktop.
 3. `tools/make-release.sh`, then attach everything in `dist/` to a GitHub release for tag `vX.Y.Z`.

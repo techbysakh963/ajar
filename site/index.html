@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ajar","applicationCategory":"UtilitiesApplication","operatingSystem":"Linux (Ubuntu, Debian, Kali)","description":"Switch passwordless sudo on and off from GNOME Quick Settings, a tray icon, or the command line. Turning on is gated by polkit.","softwareVersion":"1.0.0","license":"https://opensource.org/licenses/MIT","url":"https://techbysakh963.github.io/ajar/","downloadUrl":"https://github.com/techbysakh963/ajar/releases/latest","codeRepository":"https://github.com/techbysakh963/ajar","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Ajar","applicationCategory":"UtilitiesApplication","operatingSystem":"Linux (Ubuntu, Debian, Kali)","description":"Switch passwordless sudo on and off from GNOME Quick Settings, a tray icon, or the command line. Turning on is gated by polkit.","softwareVersion":"1.0.1","license":"https://opensource.org/licenses/MIT","url":"https://techbysakh963.github.io/ajar/","downloadUrl":"https://github.com/techbysakh963/ajar/releases/latest","codeRepository":"https://github.com/techbysakh963/ajar","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
 </script>
 <style>
 :root {
@@ -196,13 +196,13 @@ h2 { margin: 0 0 1rem; font: 800 clamp(2.2rem, 5vw, 3.4rem)/.95 "Big Shoulders D
         <div class="cmd">
           <h3>The package</h3>
           <p>Apt pulls in what is missing, and removing it turns passwordless sudo off for everyone.</p>
-          <div class="code"><pre><code>curl -fsSLO https://github.com/techbysakh963/ajar/releases/latest/download/ajar_1.0.0_all.deb
-sudo apt install ./ajar_1.0.0_all.deb</code></pre><button class="copy" type="button">Copy</button></div>
+          <div class="code"><pre><code>curl -fsSLO https://github.com/techbysakh963/ajar/releases/download/v1.0.1/ajar_1.0.1_all.deb
+sudo apt install ./ajar_1.0.1_all.deb</code></pre><button class="copy" type="button">Copy</button></div>
         </div>
         <div class="cmd">
           <h3>The installer</h3>
           <p>Shows every change and asks before making it. Add <code>--dry-run</code> to only look.</p>
-          <div class="code"><pre><code>curl -fsSL https://github.com/techbysakh963/ajar/releases/download/v1.0.0/install.sh | bash</code></pre><button class="copy" type="button">Copy</button></div>
+          <div class="code"><pre><code>curl -fsSL https://github.com/techbysakh963/ajar/releases/download/v1.0.1/install.sh | bash</code></pre><button class="copy" type="button">Copy</button></div>
         </div>
       </div>
       <p class="note">On GNOME, log out and back in once, then find <strong>Sudo</strong> in Quick Settings. Everywhere else the door appears in your panel's tray. The installer only accepts the release it was built for: it checks the download's SHA-256 before installing anything.</p>
@@ -262,7 +262,7 @@ sudo apt install ./ajar_1.0.0_all.deb</code></pre><button class="copy" type="but
 
 <div class="wrap">
   <footer class="site-foot">
-    <span>Ajar 1.0.0, MIT licensed.</span>
+    <span>Ajar 1.0.1, MIT licensed.</span>
     <nav aria-label="Footer">
       <a href="https://github.com/techbysakh963/ajar/releases">Releases</a>
       <a href="https://github.com/techbysakh963/ajar/issues/new/choose">Report a problem</a>

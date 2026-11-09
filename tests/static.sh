@@ -16,5 +16,11 @@ for f in tray/ajar-tray share/ajar-ask; do
 done
 for f in gnome-extension/*.js tests/*.js; do node --check "$f" || fail=1; done
 python3 -m json.tool gnome-extension/metadata.json >/dev/null || fail=1
+# every published version string must match bin/ajar (links break silently otherwise)
+ver="$(sed -n 's/^readonly VERSION="\(.*\)"/\1/p' bin/ajar)"
+for f in README.md site/index.html gnome-extension/metadata.json; do
+    stale="$(grep -noE '(v|ajar_|version-name": "|softwareVersion":"|Ajar )[0-9]+\.[0-9]+\.[0-9]+' "$f" | grep -v "$ver" || true)"
+    [[ -z "$stale" ]] || { echo "FAIL  $f mentions a version other than $ver:"; echo "$stale"; fail=1; }
+done
 [[ $fail -eq 0 ]] && echo "static: all checks passed" || echo "static: FAILED"
 exit $fail
