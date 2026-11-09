@@ -57,7 +57,8 @@ export function iconFor(st) {
     return st.open ? 'ajar-open-symbolic' : 'ajar-closed-symbolic';
 }
 
-export function run(argv) {
+/** Run argv; resolves with its result. Cancelling `cancellable` stops the process. */
+export function run(argv, cancellable = null) {
     return new Promise(resolve => {
         let proc;
         try {
@@ -67,7 +68,8 @@ export function run(argv) {
             resolve({ok: false, status: -1, stdout: '', stderr: String(e)});
             return;
         }
-        proc.communicate_utf8_async(null, null, (p, res) => {
+        cancellable?.connect(() => proc.force_exit());
+        proc.communicate_utf8_async(null, cancellable, (p, res) => {
             try {
                 const [, stdout, stderr] = p.communicate_utf8_finish(res);
                 resolve({ok: p.get_successful(), status: p.get_exit_status(), stdout, stderr});
@@ -78,27 +80,27 @@ export function run(argv) {
     });
 }
 
-export async function status() {
-    const r = await run([ajarPath(), 'status', '--json']);
+export async function status(cancellable = null) {
+    const r = await run([ajarPath(), 'status', '--json'], cancellable);
     return parseStatus(r.ok ? r.stdout : '');
 }
 
 /** Turn on (shows the polkit password dialog). remind: '15m' | '1h' | null */
-export async function turnOn(remind = null) {
+export async function turnOn(remind = null, cancellable = null) {
     const argv = [ajarPath(), 'on'];
     if (remind)
         argv.push('--remind', remind);
-    const r = await run(argv);
+    const r = await run(argv, cancellable);
     // 126 = dialog dismissed; 127 = not authorized / no agent (see `ajar on`)
     return {ok: r.ok, cancelled: r.status === 126, error: r.ok ? null : r.stderr.trim()};
 }
 
-export async function turnOff() {
-    const r = await run([ajarPath(), 'off']);
+export async function turnOff(cancellable = null) {
+    const r = await run([ajarPath(), 'off'], cancellable);
     return {ok: r.ok, external: r.status === 5, error: r.ok ? null : (r.stdout + r.stderr).trim()};
 }
 
-export async function remind(arg) {
-    const r = await run([ajarPath(), 'remind', arg]);
+export async function remind(arg, cancellable = null) {
+    const r = await run([ajarPath(), 'remind', arg], cancellable);
     return {ok: r.ok, error: r.ok ? null : r.stderr.trim()};
 }

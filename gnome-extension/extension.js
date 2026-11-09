@@ -85,7 +85,7 @@ class AjarToggle extends QuickMenuToggle {
     _on(remind) {
         this.menu.close();
         return this._act(async () => {
-            const r = await Ajar.turnOn(remind);
+            const r = await Ajar.turnOn(remind, this._ext.cancellable);
             if (!r.ok && !r.cancelled)
                 Main.notifyError('Ajar', r.error || 'Could not turn on passwordless sudo.');
         });
@@ -93,7 +93,7 @@ class AjarToggle extends QuickMenuToggle {
 
     _off() {
         return this._act(async () => {
-            const r = await Ajar.turnOff();
+            const r = await Ajar.turnOff(this._ext.cancellable);
             if (r.external)
                 Main.notify('Ajar', 'Passwordless sudo comes from a rule Ajar does not manage. Run "ajar doctor" to find it.');
             else if (!r.ok)
@@ -103,7 +103,7 @@ class AjarToggle extends QuickMenuToggle {
 
     _remind(arg) {
         this.menu.close();
-        return this._act(() => Ajar.remind(arg));
+        return this._act(() => Ajar.remind(arg, this._ext.cancellable));
     }
 });
 
@@ -128,6 +128,7 @@ class AjarIndicator extends SystemIndicator {
 
 export default class AjarExtension extends Extension {
     enable() {
+        this.cancellable = new Gio.Cancellable();   // stops any running ajar call on disable()
         this._icons = new Map();
         this._indicator = new AjarIndicator(this);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
@@ -160,11 +161,15 @@ export default class AjarExtension extends Extension {
     }
 
     async refresh() {
-        const st = await Ajar.status();
+        if (!this.cancellable)       // disabled: start nothing new
+            return;
+        const st = await Ajar.status(this.cancellable);
         this._indicator?.update(st);
     }
 
     disable() {
+        this.cancellable?.cancel();
+        this.cancellable = null;
         for (const id of [this._poll, this._debounce])
             if (id)
                 GLib.source_remove(id);
