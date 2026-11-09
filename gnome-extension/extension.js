@@ -39,6 +39,19 @@ class AjarToggle extends QuickMenuToggle {
         this.menu.addMenuItem(this._hint);
     }
 
+    destroy() {
+        this._onItems?.destroy();
+        this._openItems?.destroy();
+        this._hint?.destroy();
+        this._onItems = null;
+        this._openItems = null;
+        this._hint = null;
+        this._cancelItem = null;
+        this._st = null;
+        this._ext = null;
+        super.destroy();
+    }
+
     show(st) {
         this._st = st;
         const icon = this._ext.icon(Ajar.iconFor(st));
@@ -78,7 +91,7 @@ class AjarToggle extends QuickMenuToggle {
             await fn();
         } finally {
             this._busy = false;
-            await this._ext.refresh();   // never trust the click: re-read the real state
+            await this._ext?.refresh();  // never trust the click: re-read the real state (unless destroyed)
         }
     }
 
@@ -157,7 +170,7 @@ export default class AjarExtension extends Extension {
         if (this._debounce)
             return;
         this._debounce = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
-            this._debounce = 0;
+            this._debounce = null;
             this.refresh();
             return GLib.SOURCE_REMOVE;
         });
@@ -173,10 +186,14 @@ export default class AjarExtension extends Extension {
     disable() {
         this.cancellable?.cancel();
         this.cancellable = null;
-        for (const id of [this._poll, this._debounce])
-            if (id)
-                GLib.source_remove(id);
-        this._poll = this._debounce = 0;
+        if (this._poll) {
+            GLib.Source.remove(this._poll);
+            this._poll = null;
+        }
+        if (this._debounce) {
+            GLib.Source.remove(this._debounce);
+            this._debounce = null;
+        }
         this._monitor?.disconnect(this._monitorId);
         this._monitor?.cancel();
         this._monitor = null;
